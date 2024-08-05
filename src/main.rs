@@ -2,7 +2,7 @@ use bevy::{
 
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
-    window::{WindowTheme},
+    window::WindowTheme,
 };
 use bevy::window::CursorIcon; 
 
@@ -22,36 +22,33 @@ fn main() {
         LogDiagnosticsPlugin::default(),
         FrameTimeDiagnosticsPlugin,
     ))
-        .add_systems(Startup, setup)
-        .add_systems(
-            Update,
-            (
-                button_system,
-                player_movement,
-                spawn_player_shot,
-                move_player_shot,
-                despawn_player_shot,
-                spawn_enemy,
-                move_enemy,
-            ),
-        )
-        .run();
+    .init_state::<GameState>() 
+    .add_systems(Startup, setup)
+    .add_systems(OnEnter(GameState::Title), title_scene_setup)
+    .add_systems(Update, button_system.run_if(in_state(GameState::Title)))
+    .add_systems(Update, ((
+        spawn_player,
+        player_movement,
+        spawn_player_shot,
+        move_player_shot,
+        despawn_player_shot,
+        spawn_enemy,
+        move_enemy)).run_if(in_state(GameState::LevelOne)))
+    .run();
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2dBundle::default());
-    commands.spawn((
-        SpriteBundle {
-            texture: asset_server.load("rect.png"),
-            ..default()
-        },
-        Player,
-    ));
-
-    // Call button setup
-    start_button_setup(commands, asset_server);
 }
 
+
+
+#[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash)]
+enum GameState {
+    #[default]
+    Title,
+    LevelOne,
+}
 #[derive(Component)]
 struct Lifetime {
     timer: Timer,
@@ -88,6 +85,19 @@ fn player_movement(
         let movement_speed = 300.0;
         transform.translation += direction.normalize_or_zero() * movement_speed * time.delta_seconds();
     }
+}
+
+fn spawn_player(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>
+) {
+    commands.spawn((
+        SpriteBundle {
+            texture: asset_server.load("rect.png"),
+            ..default()
+        },
+        Player,
+    ));
 }
 
 fn spawn_player_shot(
@@ -161,6 +171,7 @@ fn button_system(
         (Changed<Interaction>, With<Button>),
     >,
     mut windows: Query<&mut Window>,
+    mut next_state: ResMut<NextState<GameState>>,
 ) {
     let mut window = windows.single_mut();
     
@@ -168,6 +179,7 @@ fn button_system(
         match *interaction {
             Interaction::Pressed => {
                 *color = Color::srgb(0.9, 0.9, 0.9).into();
+                next_state.set(GameState::LevelOne);
             }
             Interaction::Hovered => {
                 *color = Color::srgb(0.941, 0.914, 0.914).into();
@@ -185,7 +197,24 @@ fn button_system(
     }
 }
 
-fn start_button_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn title_scene_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn(
+        TextBundle::from_section(
+            "Arenic",
+            TextStyle {
+                font: asset_server.load("fonts/Migra-Extrabold.ttf"),
+                font_size: 182.0,
+                color: Color::WHITE,
+            },
+        )
+        .with_style(Style {
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        })
+       
+    );
+    
        commands
            .spawn(ButtonBundle {
                style: Style {
