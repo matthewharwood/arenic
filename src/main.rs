@@ -1,10 +1,27 @@
-use bevy::prelude::*;
+use bevy::{
+
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    prelude::*,
+    window::{WindowTheme},
+};
 use bevy::window::CursorIcon; 
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-       
+    .add_plugins((
+        DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "ARENIC".into(),
+                name: Some("ARENIC".into()),
+                window_theme: Some(WindowTheme::Light),
+                transparent: false,
+                ..default()
+            }),
+            ..default()
+        }),
+        LogDiagnosticsPlugin::default(),
+        FrameTimeDiagnosticsPlugin,
+    ))
         .add_systems(Startup, setup)
         .add_systems(
             Update,
@@ -32,7 +49,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 
     // Call button setup
-    button_setup(commands, asset_server);
+    start_button_setup(commands, asset_server);
 }
 
 #[derive(Component)]
@@ -156,7 +173,7 @@ fn button_system(
                 *color = Color::srgb(0.941, 0.914, 0.914).into();
             }
             Interaction::None => {
-                *color = Color::srgb(1.0, 1.0, 1.0).into();
+                *color = Color::srgba(1.0, 1.0, 1.0, 0.0).into();
             }
         }
 
@@ -168,7 +185,7 @@ fn button_system(
     }
 }
 
-fn button_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn start_button_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
        commands
            .spawn(ButtonBundle {
                style: Style {
@@ -177,9 +194,11 @@ fn button_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                    margin: UiRect::all(Val::Auto),
                    justify_content: JustifyContent::Center,
                    align_items: AlignItems::Center,
+                   border: UiRect::all(Val::Px(1.0)),
                    ..default()
                },
-               background_color: Color::srgb(1.0, 1.0, 1.0).into(),
+            //    background_color: Color::srgb(1.0, 1.0, 1.0).into(),
+               border_color: Color::srgb(1.0, 1.0, 0.0).into(),
                ..default()
            })
            .with_children(|parent| {
