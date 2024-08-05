@@ -1,6 +1,6 @@
 # Arenic
 
-A co-op game inspired by MMoRPG boss battles, Rabbit & Steal, PUBG, and Vampire Surviors.
+A co-op game inspired by MMoRPG boss battles, Rabbit & Steal, Battle Royales, and Vampire Surviors.
 
 1. Select your class.
 2. Equip gear and go into battle solo or with a party.
