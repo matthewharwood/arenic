@@ -25,6 +25,7 @@ fn main() {
     .init_state::<GameState>() 
     .add_systems(Startup, setup)
     .add_systems(OnEnter(GameState::Title), title_scene_setup)
+    .add_systems(OnExit(GameState::Title), despawn_ui_on_exit)
     .add_systems(Update, button_system.run_if(in_state(GameState::Title)))
     .add_systems(Update, ((
         spawn_player,
@@ -37,7 +38,7 @@ fn main() {
     .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 }
 
@@ -62,6 +63,9 @@ struct Enemy;
 
 #[derive(Component)]
 struct PlayerShot;
+
+#[derive(Component)]
+struct TitleUI;
 
 fn player_movement(
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -198,7 +202,7 @@ fn button_system(
 }
 
 fn title_scene_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn(
+    commands.spawn((
         TextBundle::from_section(
             "Arenic",
             TextStyle {
@@ -211,12 +215,11 @@ fn title_scene_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
-        })
-       
-    );
+        }), TitleUI, 
+    ));
     
        commands
-           .spawn(ButtonBundle {
+           .spawn((ButtonBundle {
                style: Style {
                    width: Val::Px(128.0),
                    height: Val::Px(72.0),
@@ -229,7 +232,7 @@ fn title_scene_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             //    background_color: Color::srgb(1.0, 1.0, 1.0).into(),
                border_color: Color::srgb(1.0, 1.0, 0.0).into(),
                ..default()
-           })
+           }, TitleUI))
            .with_children(|parent| {
                parent.spawn(TextBundle::from_section(
                    "Start",
@@ -240,4 +243,16 @@ fn title_scene_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                    },
                ));
            });
+}
+
+fn despawn_ui_on_exit(
+    mut commands: Commands,
+    query: Query<Entity, With<TitleUI>>, // Adjust as necessary to match your UI setup
+
+) {
+
+    for entity in query.iter() {
+        commands.entity(entity).despawn();
+    }
+
 }
