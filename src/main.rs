@@ -1,5 +1,4 @@
 use bevy::{
-
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     window::WindowTheme,
@@ -26,7 +25,9 @@ fn main() {
     .add_systems(Startup, setup)
     .add_systems(OnEnter(GameState::Title), title_scene_setup)
     .add_systems(OnExit(GameState::Title), despawn_ui_on_exit)
+    .add_systems(OnEnter(GameState::CharacterSelect), title_scene_setup)
     .add_systems(Update, button_system.run_if(in_state(GameState::Title)))
+    .add_systems(Update, character_card_spawn.run_if(in_state(GameState::CharacterSelect)))
     .add_systems(Update, ((
         spawn_player,
         player_movement,
@@ -48,8 +49,10 @@ fn setup(mut commands: Commands) {
 enum GameState {
     #[default]
     Title,
+    CharacterSelect,
     LevelOne,
 }
+
 #[derive(Component)]
 struct Lifetime {
     timer: Timer,
@@ -254,5 +257,12 @@ fn despawn_ui_on_exit(
     for entity in query.iter() {
         commands.entity(entity).despawn();
     }
+
+}
+
+// Character ECS
+
+
+fn character_card_spawn() {
 
 }
