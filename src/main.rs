@@ -1,49 +1,55 @@
+use bevy::window::CursorIcon;
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     window::WindowTheme,
 };
-use bevy::window::CursorIcon; 
 
 fn main() {
     App::new()
-    .add_plugins((
-        DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "ARENIC".into(),
-                name: Some("ARENIC".into()),
-                window_theme: Some(WindowTheme::Light),
-                transparent: false,
+        .add_plugins((
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "ARENIC".into(),
+                    name: Some("ARENIC".into()),
+                    window_theme: Some(WindowTheme::Light),
+                    transparent: false,
+                    ..default()
+                }),
                 ..default()
             }),
-            ..default()
-        }),
-        LogDiagnosticsPlugin::default(),
-        FrameTimeDiagnosticsPlugin,
-    ))
-    .init_state::<GameState>() 
-    .add_systems(Startup, setup)
-    .add_systems(OnEnter(GameState::Title), title_scene_setup)
-    .add_systems(OnExit(GameState::Title), despawn_ui_on_exit)
-    .add_systems(OnEnter(GameState::CharacterSelect), title_scene_setup)
-    .add_systems(Update, button_system.run_if(in_state(GameState::Title)))
-    .add_systems(Update, character_card_spawn.run_if(in_state(GameState::CharacterSelect)))
-    .add_systems(Update, ((
-        spawn_player,
-        player_movement,
-        spawn_player_shot,
-        move_player_shot,
-        despawn_player_shot,
-        spawn_enemy,
-        move_enemy)).run_if(in_state(GameState::LevelOne)))
-    .run();
+            LogDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin,
+        ))
+        .init_state::<GameState>()
+        .add_systems(Startup, setup)
+        .add_systems(OnEnter(GameState::Title), title_scene_setup)
+        .add_systems(OnExit(GameState::Title), despawn_ui_on_exit)
+        .add_systems(OnEnter(GameState::CharacterSelect), title_scene_setup)
+        .add_systems(Update, button_system.run_if(in_state(GameState::Title)))
+        .add_systems(
+            Update,
+            (character_card_spawn,button_card_system).run_if(in_state(GameState::CharacterSelect)),
+        )
+        .add_systems(
+            Update,
+            ((
+                spawn_player,
+                player_movement,
+                spawn_player_shot,
+                move_player_shot,
+                despawn_player_shot,
+                spawn_enemy,
+                move_enemy,
+            ))
+                .run_if(in_state(GameState::LevelOne)),
+        )
+        .run();
 }
 
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 }
-
-
 
 #[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash)]
 enum GameState {
@@ -90,14 +96,12 @@ fn player_movement(
             direction.y -= 1.0;
         }
         let movement_speed = 300.0;
-        transform.translation += direction.normalize_or_zero() * movement_speed * time.delta_seconds();
+        transform.translation +=
+            direction.normalize_or_zero() * movement_speed * time.delta_seconds();
     }
 }
 
-fn spawn_player(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>
-) {
+fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         SpriteBundle {
             texture: asset_server.load("rect.png"),
@@ -134,10 +138,7 @@ fn spawn_player_shot(
     }
 }
 
-fn move_player_shot(
-    time: Res<Time>,
-    mut query: Query<&mut Transform, With<PlayerShot>>,
-) {
+fn move_player_shot(time: Res<Time>, mut query: Query<&mut Transform, With<PlayerShot>>) {
     for mut transform in query.iter_mut() {
         transform.translation.y += 1000.0 * time.delta_seconds(); // Adjust speed as needed
     }
@@ -181,12 +182,12 @@ fn button_system(
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     let mut window = windows.single_mut();
-    
+
     for (interaction, mut color) in &mut interaction_query {
         match *interaction {
             Interaction::Pressed => {
                 *color = Color::srgb(0.9, 0.9, 0.9).into();
-                next_state.set(GameState::LevelOne);
+                next_state.set(GameState::CharacterSelect);
             }
             Interaction::Hovered => {
                 *color = Color::srgb(0.941, 0.914, 0.914).into();
@@ -218,51 +219,129 @@ fn title_scene_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             ..default()
-        }), TitleUI, 
+        }),
+        TitleUI,
     ));
-    
-       commands
-           .spawn((ButtonBundle {
-               style: Style {
-                   width: Val::Px(128.0),
-                   height: Val::Px(72.0),
-                   margin: UiRect::all(Val::Auto),
-                   justify_content: JustifyContent::Center,
-                   align_items: AlignItems::Center,
-                   border: UiRect::all(Val::Px(1.0)),
-                   ..default()
-               },
-            //    background_color: Color::srgb(1.0, 1.0, 1.0).into(),
-               border_color: Color::srgb(1.0, 1.0, 0.0).into(),
-               ..default()
-           }, TitleUI))
-           .with_children(|parent| {
-               parent.spawn(TextBundle::from_section(
-                   "Start",
-                   TextStyle {
-                       font: asset_server.load("fonts/Migra-Extralight.ttf"),
-                       font_size: 32.0,
-                       color: Color::srgb(0.0, 0.0, 0.0),
-                   },
-               ));
-           });
+
+    commands
+        .spawn((
+            ButtonBundle {
+                style: Style {
+                    width: Val::Px(128.0),
+                    height: Val::Px(72.0),
+                    margin: UiRect::all(Val::Auto),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                //    background_color: Color::srgb(1.0, 1.0, 1.0).into(),
+                border_color: Color::srgb(1.0, 1.0, 0.0).into(),
+                ..default()
+            },
+            TitleUI,
+        ))
+        .with_children(|parent| {
+            parent.spawn(TextBundle::from_section(
+                "Start",
+                TextStyle {
+                    font: asset_server.load("fonts/Migra-Extralight.ttf"),
+                    font_size: 32.0,
+                    color: Color::srgb(0.0, 0.0, 0.0),
+                },
+            ));
+        });
 }
 
 fn despawn_ui_on_exit(
     mut commands: Commands,
     query: Query<Entity, With<TitleUI>>, // Adjust as necessary to match your UI setup
-
 ) {
-
     for entity in query.iter() {
         commands.entity(entity).despawn();
     }
-
 }
 
 // Character ECS
 
+#[derive(Component)]
+struct CharacterCardUI;
 
-fn character_card_spawn() {
 
+
+fn button_card_system(
+    mut interaction_query: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut windows: Query<&mut Window>,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    let mut window = windows.single_mut();
+   
+    for (interaction, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = Color::srgb(0.9, 0.9, 0.9).into();
+                
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.941, 0.914, 0.914).into();
+                println!("hello hello")
+            }
+            Interaction::None => {
+                *color = Color::srgba(1.0, 1.0, 1.0, 0.0).into();
+            }
+        }
+
+        // Update cursor icon based on interaction
+        window.cursor.icon = match *interaction {
+            Interaction::Hovered => CursorIcon::Pointer,
+            _ => CursorIcon::Default,
+        };
+    }
+}
+
+fn character_card_spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands
+        .spawn((NodeBundle {
+            style: Style {
+                width: Val::Percent(100.),
+                height: Val::Percent(100.),
+                display: Display::Grid,
+                grid_auto_flow: GridAutoFlow::Column,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(20.0),
+                row_gap: Val::Px(20.0),
+                ..default()
+            },
+            background_color: Color::WHITE.into(),
+            ..default()
+        }, CharacterCardUI))
+        .with_children(|parent| {
+            for card_text in ["Card 1", "Card 2", "Card 3"].iter() {
+                parent
+                    .spawn(spawn_card(card_text, &asset_server));
+
+            }
+        });
+}
+
+fn spawn_card(text: &str, asset_server: &Res<AssetServer>) -> ButtonBundle {
+    ButtonBundle {
+        style: Style {
+            width: Val::Px(300.),
+            height: Val::Px(500.),
+            padding: UiRect::all(Val::Px(10.0)),
+            border: UiRect::all(Val::Px(2.0)),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        border_color: Color::BLACK.into(),
+        background_color: Color::WHITE.into(),
+        ..default()
+    }
 }
