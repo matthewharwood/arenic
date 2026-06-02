@@ -1,0 +1,5 @@
+# The default `cargo test` harness needs stack unwinding, which our
+# `panic = "abort"` profiles disable. This nightly flag teaches the harness to
+# run abort-based tests, so `cargo test` keeps working.
+[unstable]
+panic-abort-tests = true

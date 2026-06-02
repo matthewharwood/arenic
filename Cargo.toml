@@ -4,3 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+bevy = "0.18.1"
+
+# Abort on panic instead of unwinding. For a game this is the idiomatic choice:
+# it produces a smaller, faster binary and — crucially here — removes the giant
+# stack-unwinding (`__eh_frame`) tables that overflow macOS's 16 MB compact-unwind
+# limit and trigger the linker warning. Panics still print their message/backtrace.
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

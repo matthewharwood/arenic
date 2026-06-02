@@ -1,1 +1,18 @@
+# Rust build output
 /target
+
+# JetBrains IDEs (IntelliJ, CLion, RustRover, etc.)
+# Ignore the entire IDE project directory — it holds user-specific and
+# machine-specific state that should not be shared.
+/.idea/
+# Module files (can also live outside .idea/)
+*.iml
+*.ipr
+*.iws
+# JetBrains "Project Structure" / build output dirs
+/out/
+/.idea_modules/
+# Editor-based REST client scratch files
+**/httpRequests/
+# CMake (CLion)
+/cmake-build-*/
