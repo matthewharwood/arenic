@@ -1,0 +1,8 @@
+[package]
+name = "arenic_storybook"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bevy.workspace = true
+arenic_game.workspace = true

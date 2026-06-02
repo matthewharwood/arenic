@@ -1,15 +1,24 @@
-[package]
-name = "arenic"
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
-bevy = "0.18.1"
+[workspace.dependencies]
+# `ui_picking` is NOT in Bevy's default feature set; it enables the UI picking
+# backend that drives `Pointer<…>` observer events (and `Interaction`) on UI nodes.
+bevy = { version = "0.18.1", features = ["ui_picking"] }
+# The shared game crate. Both binaries (the game and the storybook) depend on it;
+# it never depends on them, so game pieces live here and are reused, not copied.
+arenic_game = { path = "crates/arenic_game" }
 
 # Abort on panic instead of unwinding. For a game this is the idiomatic choice:
 # it produces a smaller, faster binary and — crucially here — removes the giant
 # stack-unwinding (`__eh_frame`) tables that overflow macOS's 16 MB compact-unwind
 # limit and trigger the linker warning. Panics still print their message/backtrace.
+# Profiles must live in the workspace root; they apply to every member crate.
 [profile.dev]
 panic = "abort"
 

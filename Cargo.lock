@@ -185,6 +185,22 @@ dependencies = [
 name = "arenic"
 version = "0.1.0"
 dependencies = [
+ "arenic_game",
+ "bevy",
+]
+
+[[package]]
+name = "arenic_game"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
+name = "arenic_storybook"
+version = "0.1.0"
+dependencies = [
+ "arenic_game",
  "bevy",
 ]
 

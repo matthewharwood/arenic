@@ -3,3 +3,10 @@
 # run abort-based tests, so `cargo test` keeps working.
 [unstable]
 panic-abort-tests = true
+
+# In a workspace, `cargo run -p <crate>` sets `CARGO_MANIFEST_DIR` to that crate,
+# and Bevy resolves its `assets/` dir relative to it — which would point inside
+# `crates/<crate>/` instead of the shared workspace-root `assets/`. Pin the asset
+# root to the workspace (this config file's dir) so every binary finds it.
+[env]
+BEVY_ASSET_ROOT = { value = ".", relative = true }

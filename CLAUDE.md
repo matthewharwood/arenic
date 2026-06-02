@@ -2,6 +2,24 @@
 
 A game built in **Rust** (edition 2024) on **Bevy `0.18.1`** (see `Cargo.toml`).
 
+## Workspace layout
+
+A Cargo workspace with one library and two binaries:
+
+- `crates/arenic_game` — **library** of shared, reusable game pieces (components,
+  abilities, widgets, engine setup like `default_font`/`ui`). Both binaries depend
+  on it; it depends on neither. Anything shared between the game and the storybook
+  lives here and is `pub`, never duplicated.
+- `crates/arenic` — the **game** binary (`cargo run -p arenic`). Owns its app
+  scaffolding (`states`, `title_screen`, `intro_scene`).
+- `crates/arenic_storybook` — a **standalone** binary (`cargo run -p arenic_storybook`)
+  for building/exercising game pieces in isolation (an IDE-style story tree). It
+  imports real components from `arenic_game` to test them outside the game loop.
+
+Notes: `assets/` lives at the workspace root and is shared — `.cargo/config.toml`
+pins `BEVY_ASSET_ROOT` there so `cargo run -p <crate>` resolves it correctly.
+New shareable game code goes in `arenic_game`; keep the storybook self-contained.
+
 ## Bevy 0.18 — hard rule for all Bevy code
 
 **Before writing, editing, or reviewing ANY Bevy (`bevy` / `bevy_*`) code in this repo, consult the [`bevy-018` skill](.claude/skills/bevy-018/SKILL.md) and emit ONLY Bevy 0.18 APIs.** Most Bevy code in training data is pre-0.18 and will not compile here. This applies to every command, agent, and edit.
