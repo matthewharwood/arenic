@@ -10,7 +10,7 @@ use title_screen::TitleScreenPlugin;
 
 fn main() -> AppExit {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(arenic_game::default_plugins())
         // Must come after DefaultPlugins so it overwrites Bevy's built-in default font.
         .add_plugins(DefaultFontPlugin)
         .init_state::<AppState>()

@@ -10,3 +10,8 @@ panic-abort-tests = true
 # root to the workspace (this config file's dir) so every binary finds it.
 [env]
 BEVY_ASSET_ROOT = { value = ".", relative = true }
+
+# `cargo xtask <cmd>` runs the workspace automation crate (icon generation, etc.).
+# Real build logic lives in Rust there, not in shell scripts.
+[alias]
+xtask = "run --package xtask --release --"

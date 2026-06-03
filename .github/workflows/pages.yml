@@ -1,0 +1,86 @@
+name: deploy-pages
+
+# Build the game and storybook to WASM/WebGPU (Trunk) and the docs to mdBook, then
+# publish to GitHub Pages: / (landing), /<repo>/app, /<repo>/storybook, /<repo>/book.
+# Pages "Source" must be set to "GitHub Actions" in repo Settings → Pages.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # NIGHTLY is required: rust-toolchain.toml pins nightly and .cargo/config.toml
+      # uses an [unstable] table, so a stable cargo would error. Add the wasm target.
+      - name: Install Rust (nightly) + wasm32 target
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pages-wasm
+          cache-on-failure: true
+
+      # Installs only the trunk binary. Trunk auto-downloads a matching
+      # wasm-bindgen + wasm-opt at build time — no version pinning needed.
+      - name: Install Trunk
+        uses: jetli/trunk-action@v0.5.1
+        with:
+          # Pinned to a stable release (avoid accidentally pulling a beta).
+          version: v0.21.14
+
+      - name: Install mdBook
+        env:
+          MDBOOK_VERSION: "0.4.43"
+        run: |
+          curl -fsSL "https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C /usr/local/bin
+          mdbook --version
+
+      # Repo slug → the Pages project subpath (e.g. "arenic" ⇒ /arenic/...).
+      # Trunk is run from each crate dir in a subshell: it reads `cargo metadata`
+      # from CWD, and the workspace root is virtual (no root package), so building
+      # from there fails. `--dist ../../dist/...` lands output at the repo root.
+      - name: Build WASM apps + docs into dist/
+        env:
+          CARGO_INCREMENTAL: "0"
+          REPO: ${{ github.event.repository.name }}
+        run: |
+          ( cd crates/arenic && trunk build --release \
+              --public-url "/${REPO}/app/" --dist ../../dist/app index.html )
+          ( cd crates/arenic_storybook && trunk build --release \
+              --public-url "/${REPO}/storybook/" --dist ../../dist/storybook index.html )
+          MDBOOK_OUTPUT__HTML__SITE_URL="/${REPO}/book/" mdbook build -d dist/book
+          cp web/index.html dist/index.html
+          touch dist/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

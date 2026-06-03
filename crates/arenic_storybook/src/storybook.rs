@@ -25,7 +25,7 @@ impl Plugin for StorybookPlugin {
         app.init_resource::<ActiveTheme>()
             .init_resource::<CurrentStory>()
             .init_resource::<SidebarCollapsed>()
-            .add_systems(Startup, crate::stage::setup_stage)
+            .add_plugins(crate::stage::StagePlugin)
             .add_systems(
                 Update,
                 (
