@@ -1,6 +1,9 @@
 # Rust build output
 /target
 
+# mdbook build output
+/book
+
 # JetBrains IDEs (IntelliJ, CLion, RustRover, etc.)
 # Ignore the entire IDE project directory — it holds user-specific and
 # machine-specific state that should not be shared.

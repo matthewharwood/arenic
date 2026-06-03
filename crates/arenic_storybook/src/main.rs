@@ -9,9 +9,14 @@
 //! cargo run -p arenic_storybook
 //! ```
 
+mod stage;
+mod stories;
 mod storybook;
+mod widgets;
 
 use arenic_game::default_font::DefaultFontPlugin;
+use arenic_game::interaction::InteractionPlugin;
+use arenic_game::orbit::OrbitCameraPlugin;
 use bevy::prelude::*;
 use storybook::StorybookPlugin;
 
@@ -20,6 +25,8 @@ fn main() -> AppExit {
         .add_plugins(DefaultPlugins)
         // Must come after DefaultPlugins so it overwrites Bevy's built-in default font.
         .add_plugins(DefaultFontPlugin)
+        .add_plugins(InteractionPlugin)
+        .add_plugins(OrbitCameraPlugin)
         .add_systems(Startup, spawn_camera)
         .add_plugins(StorybookPlugin)
         .run()

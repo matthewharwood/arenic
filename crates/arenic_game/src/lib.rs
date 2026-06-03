@@ -13,4 +13,9 @@
 //! `pub`, rather than being duplicated.
 
 pub mod default_font;
+pub mod guildmaster;
+pub mod icon;
+pub mod interaction;
+pub mod orbit;
+pub mod theme;
 pub mod ui;
