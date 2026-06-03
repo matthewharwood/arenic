@@ -80,7 +80,6 @@ impl Plugin for InteractionPlugin {
 }
 
 /// Clicking a control focuses it.
-#[allow(clippy::type_complexity)]
 fn focus_on_press(
     mut focus: ResMut<UiFocus>,
     q: Query<(Entity, &Interaction), (Changed<Interaction>, With<Interactive>)>,
@@ -137,7 +136,6 @@ fn pointer_cursor(
 }
 
 /// Paints each control for its current interaction + focus state.
-#[allow(clippy::type_complexity)]
 fn apply_states(
     focus: Res<UiFocus>,
     mut q: Query<(

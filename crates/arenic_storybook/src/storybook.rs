@@ -91,7 +91,6 @@ const TREE: &[Folder] = &[
 ];
 
 /// Tears down and rebuilds the entire UI for the active theme + selected story.
-#[allow(clippy::too_many_arguments)]
 fn rebuild(
     mut commands: Commands,
     assets: Res<AssetServer>,

@@ -14,6 +14,15 @@ bevy = { version = "0.18.1", features = ["ui_picking"] }
 # it never depends on them, so game pieces live here and are reused, not copied.
 arenic_game = { path = "crates/arenic_game" }
 
+# Workspace-wide lint config. Each crate opts in with `[lints] workspace = true`.
+# These two clippy lints fire constantly on idiomatic Bevy systems — big `Query`
+# tuples and many system params — so we relax them once here instead of sprinkling
+# `#[allow(...)]` on every system. A named lint outranks the `-D warnings` group,
+# so CI's `cargo clippy -- -D warnings` still honours these allows.
+[workspace.lints.clippy]
+type_complexity = "allow"
+too_many_arguments = "allow"
+
 # Abort on panic instead of unwinding. For a game this is the idiomatic choice:
 # it produces a smaller, faster binary and — crucially here — removes the giant
 # stack-unwinding (`__eh_frame`) tables that overflow macOS's 16 MB compact-unwind
