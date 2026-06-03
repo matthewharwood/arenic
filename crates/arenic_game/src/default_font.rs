@@ -9,7 +9,15 @@ use bevy::text::Font;
 /// (our sans-serif) unless a component opts into a different font.
 ///
 /// `Archivo-Variable.ttf` is a variable font; its default instance is Regular weight.
-const ARCHIVO_TTF: &[u8] = include_bytes!("../assets/fonts/Archivo-Variable.ttf");
+///
+/// The font lives in the workspace-root `assets/` dir, shared by both binaries.
+/// `CARGO_MANIFEST_DIR` points at this crate (`crates/arenic_game`), so we climb
+/// two levels to reach it. This is a compile-time embed, independent of the
+/// runtime asset root.
+const ARCHIVO_TTF: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../assets/fonts/Archivo-Variable.ttf"
+));
 
 pub struct DefaultFontPlugin;
 

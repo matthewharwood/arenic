@@ -11,10 +11,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Bevy (via winit/alsa/udev) needs these system libraries at build time —
+      # their build scripts call pkg-config, which fails without the -dev packages
+      # (e.g. wayland-sys looking for wayland-client.pc). clippy runs build scripts,
+      # so it needs them too.
+      - name: Install Bevy Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev
+
       - name: Install nightly Rust with clippy
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
 
+      # Lint the shipped crates. `xtask` (a dev-only tool) is excluded so the
+      # gate doesn't compile its SVG-rasterizer toolchain.
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace --exclude xtask --all-targets --all-features -- -D warnings

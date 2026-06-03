@@ -1,0 +1,17 @@
+[book]
+title = "Arenic"
+authors = ["Matthew Harwood"]
+description = "Arenic game documentation and design system."
+src = "_docs"
+language = "en"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+additional-css = ["theme-css/arenic.css"]
+git-repository-url = "https://github.com/matthewharwood/arenic"
+no-section-label = false
+
+[output.html.fold]
+enable = true
+level = 1

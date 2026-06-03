@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Arenic</title>
+
+  <!-- Trunk writes the --public-url here, so relative asset fetches (Bevy uses
+       `assets/…`) resolve under the deploy subpath (e.g. /arenic/app/). -->
+  <base data-trunk-public-url />
+
+  <!-- Compile the `arenic` binary (adjacent Cargo.toml) with WebGPU; size-opt
+       under --release. Trunk runs cargo + wasm-bindgen + wasm-opt itself.
+       NOTE: run `trunk build` from this crate dir (workspace metadata gotcha). -->
+  <link data-trunk rel="rust" href="Cargo.toml" data-bin="arenic"
+        data-cargo-features="bevy/webgpu" data-wasm-opt="z" />
+
+  <!-- Copy the workspace-root assets/ next to the page (→ <dist>/assets). -->
+  <link data-trunk rel="copy-dir" href="../../assets" />
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #0e0e12; color: #e6e6ea;
+                 font-family: system-ui, -apple-system, sans-serif; overflow: hidden; }
+    #webgpu-warning { position: fixed; inset: 0; display: none; align-items: center;
+                      justify-content: center; text-align: center; padding: 24px; }
+    canvas { display: block; width: 100%; height: 100vh; outline: none; }
+  </style>
+</head>
+<body>
+  <div id="webgpu-warning">
+    <div>
+      <h2>WebGPU required</h2>
+      <p>This build renders with WebGPU. Use a recent Chrome/Edge, Safari 18+, or enable WebGPU in Firefox.</p>
+    </div>
+  </div>
+  <script>
+    if (!('gpu' in navigator)) {
+      document.getElementById('webgpu-warning').style.display = 'flex';
+    }
+  </script>
+</body>
+</html>
