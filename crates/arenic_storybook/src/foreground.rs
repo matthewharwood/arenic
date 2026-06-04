@@ -18,8 +18,9 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, ShaderType};
 use bevy::shader::ShaderRef;
 
+use crate::arena::{DEFAULT_FG, DEFAULT_SKY, SwarmSpec, Voice, spec};
 use crate::layers::{Layer, LayerTag};
-use crate::stage::StageCamera;
+use crate::stage::{StageCamera, board_center};
 use crate::stories::StoryId;
 use crate::storybook::CurrentStory;
 
@@ -72,9 +73,9 @@ impl Material for CloudFog {
         SHADER.into()
     }
     fn alpha_mode(&self) -> AlphaMode {
-        // The skybox is an OPAQUE backdrop so the frosted-glass floor can refract
-        // it (specular transmission samples the opaque scene). The foreground
-        // blends over the scene.
+        // The skybox is an OPAQUE backdrop — a solid sky the translucent
+        // liquid-glass floor and the under-floor swarm read against. The
+        // foreground BLENDS over the scene as a near haze.
         if self.params.mode.x > 0.5 {
             AlphaMode::Blend
         } else {
@@ -89,18 +90,22 @@ pub struct ForegroundPlugin;
 
 impl Plugin for ForegroundPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<CloudFog>::default()).add_systems(
-            Update,
-            (
-                attach_atmosphere,
-                update_atmosphere,
-                // The discrete drifting sky-swarm — repopulated per arena, animated
-                // every frame, re-toned on theme change.
-                respawn_swarm.run_if(resource_changed::<CurrentStory>),
-                animate_swarm,
-                retone_swarm,
-            ),
-        );
+        app.add_plugins(MaterialPlugin::<CloudFog>::default())
+            .add_systems(
+                Update,
+                (
+                    attach_atmosphere,
+                    // Re-shape the planes only when the story or theme actually changes.
+                    update_atmosphere.run_if(
+                        resource_changed::<CurrentStory>.or(resource_changed::<ActiveTheme>),
+                    ),
+                    // The discrete drifting sky-swarm — repopulated per arena, animated
+                    // every frame, re-toned on theme change.
+                    respawn_swarm.run_if(resource_changed::<CurrentStory>),
+                    animate_swarm,
+                    retone_swarm.run_if(resource_changed::<ActiveTheme>),
+                ),
+            );
     }
 }
 
@@ -109,74 +114,23 @@ fn lin(c: Color, a: f32) -> Vec4 {
     Vec4::new(l.red, l.green, l.blue, a)
 }
 
-/// One atmosphere voice: `(style, scale, drift_x, drift_y, coverage, vignette, speed)`.
-type Voice = (f32, f32, f32, f32, f32, f32, f32);
-
-/// Per-arena `(skybox, foreground)` voices.
-///
-/// HARMONY FRAMEWORK: the two planes are different instruments, not the same
-/// effect at another scale. The SKYBOX is a continuous FIELD atmosphere (styles
-/// banded/billows/vertical/spiral/hearth); the FOREGROUND is a discrete or
-/// structured NEAR effect (embers/sweep/pulse/grain/streaks/ripple). They
-/// contrast on effect TYPE (always field vs near), drift DIRECTION (perpendicular
-/// or opposite), REGISTER (the foreground is finer), and TEMPO (different speed).
-/// Across arenas both the skybox set and the foreground set stay distinct
-/// (colour + style + direction). Style ids: banded(0), billows(1), vertical(2),
-/// spiral(3), embers(4), sweep(5), pulse(6), hearth(7), grain(8), streaks(9),
-/// ripple(10).
+/// The `(skybox, foreground)` voices for a story — the arena's pair from
+/// [`crate::arena::spec`], or the generic [`DEFAULT_SKY`]/[`DEFAULT_FG`] for the
+/// non-arena (design-token) pages. See [`crate::arena`] for the harmony framework.
 fn arena_voices(story: Option<StoryId>) -> (Voice, Voice) {
-    match story {
-        //                              SKYBOX (field)                              FOREGROUND (near — counterpoint)
-        Some(StoryId::Hunter) => (
-            (0.0, 3.0, 0.030, 0.000, 0.55, 0.40, 0.45), // banded bands drifting sideways
-            (9.0, 5.0, 0.000, -0.060, 0.50, 0.0, 0.90), // fine streaks falling, faster (perp)
-        ),
-        Some(StoryId::Guildmaster) => (
-            (7.0, 2.0, 0.008, 0.004, 0.58, 0.30, 0.40), // hearth haze breathing in place
-            (4.0, 6.0, 0.000, 0.050, 0.50, 0.0, 0.50),  // warm motes rising (discrete)
-        ),
-        Some(StoryId::Cardinal) => (
-            (1.0, 2.5, 0.012, 0.006, 0.50, 0.35, 0.35), // gold incense billows rolling
-            (8.0, 9.0, 0.000, -0.050, 0.55, 0.0, 0.50), // fine gilt grain sifting down
-        ),
-        Some(StoryId::Forager) => (
-            (2.0, 2.5, 0.000, 0.050, 0.58, 0.40, 1.00), // green spores rising (vertical)
-            (8.0, 7.0, 0.060, 0.000, 0.50, 0.0, 0.70),  // wind-grain drifting sideways (perp)
-        ),
-        Some(StoryId::Warrior) => (
-            (2.0, 2.2, 0.000, -0.040, 0.62, 0.45, 1.00), // ash lid pressing down
-            (4.0, 5.0, 0.000, 0.060, 0.50, 0.0, 1.40),   // sparks rising fast (opposite)
-        ),
-        Some(StoryId::Thief) => (
-            (0.0, 2.5, 0.000, 0.025, 0.50, 0.45, 0.40), // cyan bands, vertical drift
-            (5.0, 2.5, 0.030, 0.000, 0.50, 0.0, 0.50),  // watch-band sweeping across (perp)
-        ),
-        Some(StoryId::Alchemist) => (
-            (1.0, 2.5, -0.020, 0.015, 0.60, 0.40, 1.00), // lime smog rolling, two layers
-            (10.0, 4.0, 0.000, 0.000, 0.50, 0.0, 0.80),  // bubble-ripples popping (radial)
-        ),
-        Some(StoryId::Merchant) => (
-            (3.0, 2.2, 0.000, 0.000, 0.54, 0.45, 0.70), // gold-plum smoke swirling
-            (9.0, 5.0, 0.040, -0.030, 0.50, 0.0, 0.90), // coin-streaks tumbling diagonally
-        ),
-        Some(StoryId::Bard) => (
-            (1.0, 3.0, 0.015, 0.010, 0.54, 0.40, 0.50), // violet haze drifting
-            (6.0, 3.0, 0.010, 0.010, 0.54, 0.0, 1.50),  // pink/cyan throb on the beat (rhythm)
-        ),
-        _ => (
-            (1.0, 2.5, 0.010, 0.010, 0.50, 0.35, 0.60),
-            (8.0, 7.0, -0.010, 0.000, 0.40, 0.0, 0.80),
-        ),
+    match story.and_then(spec) {
+        Some(s) => (s.sky, s.fg),
+        None => (DEFAULT_SKY, DEFAULT_FG),
     }
 }
 
+/// Packs one [`Voice`] into the shader uniform, tinted by the active theme.
 fn voice_params(v: Voice, theme: &Theme, foreground: bool) -> CloudParams {
-    let (style, scale, dx, dy, cov, vig, speed) = v;
     CloudParams {
-        tint: lin(theme.base_300, cov),
-        accent: lin(theme.primary, speed),
-        vignette: lin(theme.base_300, vig),
-        flags: Vec4::new(style, scale, dx, dy),
+        tint: lin(theme.base_300, v.coverage),
+        accent: lin(theme.primary, v.speed),
+        vignette: lin(theme.base_300, v.vignette),
+        flags: Vec4::new(v.style.as_f32(), v.scale, v.drift.x, v.drift.y),
         // Foreground is edge-framed + subtle; the skybox is full + the main layer.
         mode: if foreground {
             Vec4::new(1.0, 0.5, 0.0, 0.0)
@@ -241,9 +195,6 @@ fn update_atmosphere(
     handles: Option<Res<CloudMats>>,
     mut mats: ResMut<Assets<CloudFog>>,
 ) {
-    if !current.is_changed() && !active.is_changed() {
-        return;
-    }
     let Some(handles) = handles else {
         return;
     };
@@ -271,14 +222,9 @@ fn update_atmosphere(
 // arena theme colour. Mirrors the data-driven hollow-light pattern.
 // ===========================================================================
 
-/// Board centre — the §1 midpoint of the 66×31 field (`0..16.25`, `0..7.5`).
-fn board_center() -> Vec2 {
-    Vec2::new(8.125, 3.75)
-}
-
 /// A small mote silhouette family, shared across arenas to keep one grammar.
 #[derive(Clone, Copy)]
-enum Mote {
+pub(crate) enum Mote {
     /// Round glow-mote (ember, spore).
     Spark,
     /// Flat quad (gilt-leaf, ash flake, coin, confetti).
@@ -291,7 +237,7 @@ enum Mote {
 
 /// The per-arena drift archetype — the distinct motion that separates arenas.
 #[derive(Clone, Copy)]
-enum SwarmMotion {
+pub(crate) enum SwarmMotion {
     /// Hunter — straight glides along the corridors with sharp turns.
     Patrol,
     /// Guildmaster — gentle warm hearth-updraft (calmest of all).
@@ -328,25 +274,6 @@ struct SwarmStyle {
     mat: Handle<StandardMaterial>,
 }
 
-/// Per-arena `(motion, silhouette, count, scale)`. Colour is always the arena's
-/// theme accent (`primary`), so it re-tones and stays per-arena distinct.
-fn arena_swarm(story: StoryId) -> Option<(SwarmMotion, Mote, usize, f32)> {
-    use Mote::{Bubble, Dart, Flake, Spark};
-    use SwarmMotion::*;
-    Some(match story {
-        StoryId::Hunter => (Patrol, Dart, 12, 0.11), // scout darts patrol the sightlines
-        StoryId::Guildmaster => (HearthRise, Spark, 14, 0.07), // warm hearth embers rising
-        StoryId::Cardinal => (PendulumFall, Flake, 12, 0.10), // gilt-leaf pendulum descent
-        StoryId::Forager => (GustDrift, Spark, 16, 0.06), // wind-borne spores
-        StoryId::Warrior => (UpdraftChurn, Flake, 13, 0.09), // forge cinders churn up
-        StoryId::Thief => (FurtiveDart, Dart, 10, 0.09), // furtive bats / coin-flakes
-        StoryId::Alchemist => (OpposingDrift, Bubble, 14, 0.08), // bubbles up / droplets down
-        StoryId::Merchant => (TumbleArc, Flake, 12, 0.10), // tumbling coins / die-pips
-        StoryId::Bard => (BeatDrift, Flake, 16, 0.09), // confetti on the beat
-        _ => return None,
-    })
-}
-
 /// The shared, translucent, lightly-emissive material for a swarm tinted `c`.
 fn swarm_material(c: Color) -> StandardMaterial {
     let l = c.to_linear();
@@ -368,6 +295,25 @@ fn mote_mesh(mote: Mote, s: f32) -> Mesh {
     }
 }
 
+/// Swarm geometry — the single place the "under the floor, never through it"
+/// invariant is defined. The ring half-axes sit a little inside the board
+/// half-extents (~8.1 × 3.75) so motes hug the rim. `SWARM_Z` seats the swarm
+/// below the floor plane (z = -0.02); since the motion never exceeds `±SWARM_AMP.z`,
+/// the swarm rides z ∈ [SWARM_Z - amp, SWARM_Z + amp] = [-2.3, -0.5], always under it.
+const SWARM_RING_X: f32 = 7.5;
+const SWARM_RING_Y: f32 = 3.4;
+const SWARM_Z: f32 = -1.4;
+const SWARM_AMP: Vec3 = Vec3::new(1.4, 1.0, 0.9);
+/// Global slow factor on swarm time — keeps the drift calm and non-distracting.
+const SWARM_TIME_SCALE: f32 = 0.5;
+
+/// The liquid-glass floor plane (see `stage.rs` board). The swarm lives under it.
+const FLOOR_PLANE_Z: f32 = -0.02;
+/// Compile-time invariant: the swarm's highest reach stays below the floor, so it
+/// goes *around and under* the ground but never *through* it. A motion can't exceed
+/// `±SWARM_AMP.z`, so the ceiling is `SWARM_Z + SWARM_AMP.z`.
+const _: () = assert!(SWARM_Z + SWARM_AMP.z < FLOOR_PLANE_Z);
+
 /// Despawns the old swarm and spawns the selected arena's, in a low outer ring
 /// UNDER the board (seen through the liquid glass). A no-op for non-arena stories.
 fn respawn_swarm(
@@ -384,7 +330,13 @@ fn respawn_swarm(
     let Some(story) = current.0 else {
         return;
     };
-    let Some((motion, mote, count, scale)) = arena_swarm(story) else {
+    let Some(SwarmSpec {
+        motion,
+        mote,
+        count,
+        scale,
+    }) = spec(story).map(|s| s.swarm)
+    else {
         return;
     };
 
@@ -395,13 +347,16 @@ fn respawn_swarm(
 
     let center = board_center();
     // A golden-angle spread keeps the ring even; `r` stays in the outer band so
-    // motes ride the board edges + margin, never the central boss zone. `z = -1.4`
-    // seats the whole swarm UNDER the floor (z = -0.02); with amp.z = 0.9 it rides
-    // z ∈ [-2.3, -0.5] — under and around the ground, never through it.
+    // motes ride the board edges + margin, never the central boss zone (see the
+    // SWARM_* consts above for the under-floor invariant).
     for i in 0..count {
         let a = i as f32 * 2.399_963_2; // golden angle
         let r = 0.65 + 0.4 * ((i as f32 + 0.5) / count as f32).sqrt();
-        let home = Vec3::new(center.x + a.cos() * r * 7.5, center.y + a.sin() * r * 3.4, -1.4);
+        let home = Vec3::new(
+            center.x + a.cos() * r * SWARM_RING_X,
+            center.y + a.sin() * r * SWARM_RING_Y,
+            SWARM_Z,
+        );
         // OpposingDrift: half the bubbles rise, half the droplets fall.
         let z_sign = if matches!(motion, SwarmMotion::OpposingDrift) && i % 2 == 1 {
             -1.0
@@ -416,7 +371,7 @@ fn respawn_swarm(
                 motion,
                 phase: i as f32 * 0.7,
                 home,
-                amp: Vec3::new(1.4, 1.0, 0.9 * z_sign),
+                amp: Vec3::new(SWARM_AMP.x, SWARM_AMP.y, SWARM_AMP.z * z_sign),
             },
             LayerTag(Layer::Swarm),
             NotShadowCaster,
@@ -427,7 +382,7 @@ fn respawn_swarm(
 
 /// Drives every swarm member's drift + spin from its motion archetype.
 fn animate_swarm(time: Res<Time>, mut swarm: Query<(&SwarmMember, &mut Transform)>) {
-    let t = time.elapsed_secs() * 0.5; // global slow factor — non-distracting
+    let t = time.elapsed_secs() * SWARM_TIME_SCALE;
     for (m, mut tf) in &mut swarm {
         let (offset, rot) = swarm_offset(m.motion, m.phase, t, m.amp);
         tf.translation = m.home + offset;
@@ -441,9 +396,6 @@ fn retone_swarm(
     style: Option<Res<SwarmStyle>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if !active.is_changed() {
-        return;
-    }
     let Some(style) = style else {
         return;
     };
@@ -461,15 +413,27 @@ fn swarm_offset(motion: SwarmMotion, phase: f32, t: f32, amp: Vec3) -> (Vec3, Qu
     let saw = |k: f32| (t * k + phase).rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU;
     match motion {
         Patrol => (
-            Vec3::new(amp.x * (2.0 * s(0.35)).tanh(), amp.y * s(0.16), amp.z * 0.2 * s(0.5)),
+            Vec3::new(
+                amp.x * (2.0 * s(0.35)).tanh(),
+                amp.y * s(0.16),
+                amp.z * 0.2 * s(0.5),
+            ),
             Quat::from_rotation_z(0.3 * s(0.4)),
         ),
         HearthRise => (
-            Vec3::new(amp.x * 0.4 * s(0.3), amp.y * 0.3 * s(0.25), amp.z * saw(0.10)),
+            Vec3::new(
+                amp.x * 0.4 * s(0.3),
+                amp.y * 0.3 * s(0.25),
+                amp.z * saw(0.10),
+            ),
             Quat::IDENTITY,
         ),
         PendulumFall => (
-            Vec3::new(amp.x * s(0.6), amp.y * 0.3 * s(0.4), amp.z * (1.0 - saw(0.08))),
+            Vec3::new(
+                amp.x * s(0.6),
+                amp.y * 0.3 * s(0.4),
+                amp.z * (1.0 - saw(0.08)),
+            ),
             Quat::from_rotation_y(0.6 * s(0.6)),
         ),
         GustDrift => (
@@ -481,7 +445,11 @@ fn swarm_offset(motion: SwarmMotion, phase: f32, t: f32, amp: Vec3) -> (Vec3, Qu
             Quat::from_rotation_z(0.5 * s(0.3)),
         ),
         UpdraftChurn => (
-            Vec3::new(amp.x * 0.4 * s(0.3), amp.y * 0.3 * s(0.27), amp.z * (0.5 + 0.5 * s(0.4))),
+            Vec3::new(
+                amp.x * 0.4 * s(0.3),
+                amp.y * 0.3 * s(0.27),
+                amp.z * (0.5 + 0.5 * s(0.4)),
+            ),
             Quat::from_rotation_x(0.8 * s(0.5)),
         ),
         FurtiveDart => (
@@ -494,7 +462,11 @@ fn swarm_offset(motion: SwarmMotion, phase: f32, t: f32, amp: Vec3) -> (Vec3, Qu
         ),
         OpposingDrift => (
             // amp.z sign (set per index) decides rise vs fall.
-            Vec3::new(amp.x * 0.3 * s(0.2), amp.y * 0.3 * s(0.18), amp.z * saw(0.12)),
+            Vec3::new(
+                amp.x * 0.3 * s(0.2),
+                amp.y * 0.3 * s(0.18),
+                amp.z * saw(0.12),
+            ),
             Quat::IDENTITY,
         ),
         TumbleArc => (
@@ -504,9 +476,65 @@ fn swarm_offset(motion: SwarmMotion, phase: f32, t: f32, amp: Vec3) -> (Vec3, Qu
         BeatDrift => {
             let beat = (t * 2.0 + phase).sin().max(0.0).powi(4);
             (
-                Vec3::new(amp.x * s(0.2), amp.y * s(0.16), -amp.z * 0.3 * saw(0.1) + amp.z * 0.5 * beat),
+                Vec3::new(
+                    amp.x * s(0.2),
+                    amp.y * s(0.16),
+                    -amp.z * 0.3 * saw(0.1) + amp.z * 0.5 * beat,
+                ),
                 Quat::from_rotation_z(0.5 * s(0.35)),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EVERY_MOTION: [SwarmMotion; 9] = [
+        SwarmMotion::Patrol,
+        SwarmMotion::HearthRise,
+        SwarmMotion::PendulumFall,
+        SwarmMotion::GustDrift,
+        SwarmMotion::UpdraftChurn,
+        SwarmMotion::FurtiveDart,
+        SwarmMotion::OpposingDrift,
+        SwarmMotion::TumbleArc,
+        SwarmMotion::BeatDrift,
+    ];
+
+    #[test]
+    fn swarm_never_rises_through_the_floor() {
+        // The resting-ceiling bound (SWARM_Z + SWARM_AMP.z < floor) is a
+        // compile-time invariant (see FLOOR_PLANE_Z assertion above). Here we also
+        // sample every archetype over time + phase, so a future motion tweak that
+        // pushes a mote above its amplitude bound is caught too.
+        for (m, motion) in EVERY_MOTION.into_iter().enumerate() {
+            for i in 0..200 {
+                let t = i as f32 * 0.31;
+                let phase = m as f32 * 0.7;
+                let (offset, _) = swarm_offset(motion, phase, t, SWARM_AMP);
+                let z = SWARM_Z + offset.z;
+                assert!(
+                    z < FLOOR_PLANE_Z,
+                    "motion #{m} rose to z = {z} (floor is {FLOOR_PLANE_Z})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn voice_mode_flags_distinguish_skybox_from_foreground() {
+        let theme = arenic_game::theme::ThemeId::Dark.palette();
+        assert_eq!(
+            voice_params(DEFAULT_SKY, &theme, false).mode,
+            Vec4::new(0.0, 1.0, 0.0, 0.0),
+            "skybox is opaque/full",
+        );
+        assert_eq!(
+            voice_params(DEFAULT_FG, &theme, true).mode,
+            Vec4::new(1.0, 0.5, 0.0, 0.0),
+            "foreground is edge-framed/half-alpha",
+        );
     }
 }

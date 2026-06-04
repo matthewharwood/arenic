@@ -27,13 +27,14 @@ use arenic_game::theme::{ActiveTheme, Theme};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
 use bevy::color::Alpha;
-use bevy::post_process::bloom::Bloom;
 use bevy::light::ShadowFilteringMethod;
+use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 use bevy::render::view::Hdr;
 
-use crate::hollow::{HollowLight, LightBehavior, spawn_hollow_boss};
+use crate::arena::{BossShell, BossSpec, spec};
+use crate::hollow::{HollowLight, spawn_hollow_boss};
 use crate::layers::{Layer, LayerTag};
 use crate::stories::StoryId;
 
@@ -53,8 +54,9 @@ const GRID_H: i32 = 31;
 const TILE: f32 = 0.25;
 
 /// The board centre — the midpoint of the tile-centre extents (`0..16.25`,
-/// `0..7.5`). The camera frames here and content is dropped here.
-fn board_center() -> Vec2 {
+/// `0..7.5`). The camera frames here and content is dropped here. The single
+/// source of truth for board geometry (the atmosphere swarm consumes it too).
+pub(crate) fn board_center() -> Vec2 {
     Vec2::new(
         (GRID_W - 1) as f32 * TILE * 0.5, // 8.125
         (GRID_H - 1) as f32 * TILE * 0.5, // 3.75
@@ -72,10 +74,12 @@ impl Plugin for StagePlugin {
             (
                 // Re-populate the board whenever the selected story changes.
                 swap_content.run_if(resource_changed::<crate::storybook::CurrentStory>),
-                // Discover async-loaded glTF materials, then re-tone everything.
+                // Discover async-loaded glTF materials — clones each into a private
+                // instance and paints it once, so the systems below need only run
+                // on a real theme switch (not every frame).
                 collect_content_materials,
-                retheme_stage,
-                retheme_content,
+                retheme_stage.run_if(resource_changed::<ActiveTheme>),
+                retheme_content.run_if(resource_changed::<ActiveTheme>),
             ),
         );
     }
@@ -147,9 +151,8 @@ fn setup_stage(
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
     );
-    image.texture_descriptor.usage = TextureUsages::TEXTURE_BINDING
-        | TextureUsages::COPY_DST
-        | TextureUsages::RENDER_ATTACHMENT;
+    image.texture_descriptor.usage =
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
     let image = images.add(image);
     commands.insert_resource(Stage3d {
         image: image.clone(),
@@ -303,132 +306,215 @@ fn swap_content(
     let Some(story) = current.0 else {
         return;
     };
+    // The arena's whole identity (boss + props) comes from the one ArenaSpec table.
+    let Some(arena) = spec(story) else {
+        return;
+    };
     let center = board_center();
-    // UNITS_AND_SCALE §5: rotate +90° about X so the authored (Y-up) token faces
-    // the camera — the disc lies flat, the pyramid's apex points at the camera.
-    let face_camera = Quat::from_rotation_x(FRAC_PI_2);
-
-    // A hollow boss: dark shell (`arenic_game`) + emissive inner core (animated).
-    // `hb!(shell, shell-tint, core-mesh, rest-z, behavior, light-colour)`.
-    macro_rules! hb {
-        ($shell:expr, $core:expr, $z:expr, $behavior:expr, $color:expr $(,)?) => {{
-            spawn_hollow_boss(
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-                center,
-                $shell,
-                shell_dark,
-                $core,
-                Transform::from_xyz(0.0, 0.0, $z),
-                $behavior,
-                $color,
-            );
-        }};
+    spawn_boss(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &assets,
+        center,
+        &arena.boss,
+    );
+    // Ambient flora/fauna props — a toggle-ready scene layer (placeholders for
+    // ARE-18…26). Re-toned and despawned like any content.
+    for prop in &arena.props {
+        spawn_prop(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            center,
+            prop.prim,
+            prop.offset,
+            prop.tint,
+        );
     }
+}
 
-    match story {
-        StoryId::Guildmaster => {
-            // The Guild House home: a calm pyramid (reusing boss_a) on the warm
-            // Coffee theme — the guild's safe hearth, not a true boss.
+/// Spawns an arena's boss from its [`BossSpec`]: a hollow shell + animated core,
+/// or the Guild House home pyramid (no core). The shell→glTF-loader mapping lives
+/// here — the ONE place a new shell is wired; which shell each arena wears lives in
+/// the [`crate::arena`] spec.
+fn spawn_boss(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    assets: &AssetServer,
+    center: Vec2,
+    boss: &BossSpec,
+) {
+    // §5: rotate +90° about X so the authored (Y-up) token faces the camera.
+    let face_camera = Quat::from_rotation_x(FRAC_PI_2);
+    match *boss {
+        BossSpec::Home { color } => {
+            // The Guild House: a calm pyramid (reusing boss_a), the safe hearth.
             commands.spawn((
-                boss_a(&assets),
-                StageContent {
-                    tint: |t: &Theme| t.brand(),
-                },
+                boss_a(assets),
+                StageContent { tint: color },
                 LayerTag(Layer::Boss),
                 Transform::from_xyz(center.x, center.y, 0.02).with_rotation(face_camera),
             ));
         }
-        // --- The eight hollow-light arena bosses (ARE-8…ARE-15) ---
-        StoryId::Hunter => hb!(
-            hollow_obelisk(&assets),
-            Cuboid::new(0.06, 0.06, 1.6).into(),
-            1.0,
-            LightBehavior::ObeliskBlade,
-            |t: &Theme| t.brand(),
-        ),
-        StoryId::Alchemist => hb!(
-            truncated_cone(&assets),
-            Cuboid::new(0.5, 0.5, 0.06).into(),
-            0.12,
-            LightBehavior::CauldronRise,
-            |t: &Theme| t.success,
-        ),
-        StoryId::Cardinal => hb!(
-            torus_halo(&assets),
-            Cuboid::new(0.55, 0.55, 0.04).into(),
-            0.06,
-            LightBehavior::HaloFill,
-            |t: &Theme| t.warning,
-        ),
-        StoryId::Warrior => hb!(
-            hex_prism(&assets),
-            Sphere::new(0.2).into(),
-            0.22,
-            LightBehavior::PrismBlock,
-            |t: &Theme| t.error,
-        ),
-        StoryId::Thief => hb!(
-            triangular_prism(&assets),
-            Cuboid::new(0.5, 0.12, 0.12).into(),
-            0.16,
-            LightBehavior::WedgeBeam,
-            |t: &Theme| t.secondary,
-        ),
-        StoryId::Bard => hb!(
-            capsule_resonator(&assets),
-            Cuboid::new(0.7, 0.05, 0.05).into(),
-            0.16,
-            LightBehavior::CapsulePulse,
-            |t: &Theme| t.accent,
-        ),
-        StoryId::Forager => hb!(
-            stepped_pyramid(&assets),
-            Cuboid::new(0.1, 0.1, 0.9).into(),
-            0.5,
-            LightBehavior::ZigguratGrow,
-            |t: &Theme| t.success,
-        ),
-        StoryId::Merchant => hb!(
-            hollow_icosphere(&assets),
-            Sphere::new(0.22).into(),
-            0.3,
-            LightBehavior::GeodeShimmer,
-            |t: &Theme| t.warning,
-        ),
-        _ => {}
+        BossSpec::Hollow {
+            shell,
+            core,
+            core_z,
+            behavior,
+            color,
+        } => {
+            let core_mesh = core.to_mesh();
+            let rest = Transform::from_xyz(0.0, 0.0, core_z);
+            // The single shell → glTF-loader mapping. Each arm spawns the shell its
+            // arena chose; only one runs, so `core_mesh` moves into exactly one call.
+            match shell {
+                BossShell::Obelisk => spawn_hollow_boss(
+                    commands,
+                    meshes,
+                    materials,
+                    center,
+                    hollow_obelisk(assets),
+                    shell_dark,
+                    core_mesh,
+                    rest,
+                    behavior,
+                    color,
+                ),
+                BossShell::TruncatedCone => spawn_hollow_boss(
+                    commands,
+                    meshes,
+                    materials,
+                    center,
+                    truncated_cone(assets),
+                    shell_dark,
+                    core_mesh,
+                    rest,
+                    behavior,
+                    color,
+                ),
+                BossShell::TorusHalo => spawn_hollow_boss(
+                    commands,
+                    meshes,
+                    materials,
+                    center,
+                    torus_halo(assets),
+                    shell_dark,
+                    core_mesh,
+                    rest,
+                    behavior,
+                    color,
+                ),
+                BossShell::HexPrism => spawn_hollow_boss(
+                    commands,
+                    meshes,
+                    materials,
+                    center,
+                    hex_prism(assets),
+                    shell_dark,
+                    core_mesh,
+                    rest,
+                    behavior,
+                    color,
+                ),
+                BossShell::TriangularPrism => spawn_hollow_boss(
+                    commands,
+                    meshes,
+                    materials,
+                    center,
+                    triangular_prism(assets),
+                    shell_dark,
+                    core_mesh,
+                    rest,
+                    behavior,
+                    color,
+                ),
+                BossShell::CapsuleResonator => spawn_hollow_boss(
+                    commands,
+                    meshes,
+                    materials,
+                    center,
+                    capsule_resonator(assets),
+                    shell_dark,
+                    core_mesh,
+                    rest,
+                    behavior,
+                    color,
+                ),
+                BossShell::SteppedPyramid => spawn_hollow_boss(
+                    commands,
+                    meshes,
+                    materials,
+                    center,
+                    stepped_pyramid(assets),
+                    shell_dark,
+                    core_mesh,
+                    rest,
+                    behavior,
+                    color,
+                ),
+                BossShell::HollowIcosphere => spawn_hollow_boss(
+                    commands,
+                    meshes,
+                    materials,
+                    center,
+                    hollow_icosphere(assets),
+                    shell_dark,
+                    core_mesh,
+                    rest,
+                    behavior,
+                    color,
+                ),
+            };
+        }
     }
-
-    // Ambient flora/fauna props for arena stories — a toggle-ready scene layer
-    // (placeholders; real meshes later). Re-toned and despawned like any content.
-    spawn_arena_props(&mut commands, &mut meshes, &mut materials, center, story);
 }
 
-/// Once a [`StageContent`] root's glTF scene has spawned, records its material
-/// handles (as a component on the root) so the retheme system can tint it. The
-/// `Without<ContentMaterials>` filter makes this run once per content instance,
-/// retrying each frame until the async scene load fills in the hierarchy.
+/// Once a [`StageContent`] root's glTF scene has spawned and its materials have
+/// loaded, **clones** each material into a private instance (re-pointing the mesh
+/// at the clone) and paints it from the content's tint, then records the clone
+/// handles on the root for later re-toning. Cloning is what keeps one story from
+/// mutating the shared, cached glTF material another instance/story relies on.
+///
+/// The `Without<ContentMaterials>` filter retries each frame until the async load
+/// fills in the hierarchy; we only commit once *every* discovered mesh material is
+/// loaded (so a partially-loaded scene is retried, never half-recorded).
 fn collect_content_materials(
     mut commands: Commands,
-    roots: Query<Entity, (With<StageContent>, Without<ContentMaterials>)>,
+    active: Res<ActiveTheme>,
+    roots: Query<(Entity, &StageContent), Without<ContentMaterials>>,
     children: Query<&Children>,
     mesh_mats: Query<&MeshMaterial3d<StandardMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for root in &roots {
+    let theme = active.palette();
+    for (root, content) in &roots {
+        let color = (content.tint)(&theme);
         // Depth-first walk of the spawned scene hierarchy.
-        let mut found = Vec::new();
+        let mut meshes_seen = 0usize;
+        let mut owned = Vec::new();
         let mut stack = vec![root];
         while let Some(entity) = stack.pop() {
             if let Ok(mat) = mesh_mats.get(entity) {
-                found.push(mat.0.clone());
+                meshes_seen += 1;
+                if let Some(src) = materials.get(&mat.0) {
+                    let mut copy = src.clone();
+                    copy.base_color = color; // paint once, up front
+                    let handle = materials.add(copy);
+                    commands
+                        .entity(entity)
+                        .insert(MeshMaterial3d(handle.clone()));
+                    owned.push(handle);
+                }
             }
             if let Ok(kids) = children.get(entity) {
                 stack.extend(kids.iter());
             }
         }
-        if !found.is_empty() {
-            commands.entity(root).insert(ContentMaterials(found));
+        // Commit only when the whole scene's materials are present and cloned.
+        if meshes_seen > 0 && owned.len() == meshes_seen {
+            commands.entity(root).insert(ContentMaterials(owned));
         }
     }
 }
@@ -448,7 +534,11 @@ fn retheme_stage(
     let theme = active.palette();
 
     // Translucent so the skybox + under-floor swarm read through the liquid glass.
-    set_base_color(&mut materials, &stage.board, theme.surface_2().with_alpha(0.5));
+    set_base_color(
+        &mut materials,
+        &stage.board,
+        theme.surface_2().with_alpha(0.5),
+    );
     set_base_color(&mut materials, &stage.dots, theme.text_muted());
     set_base_color(&mut materials, &stage.border, theme.border_bold());
 
@@ -491,15 +581,9 @@ fn set_base_color(
     }
 }
 
-/// Marks an ambient flora/fauna prop on the stage — a toggle-ready scene layer.
-/// Props are tinted on-theme via [`StageContent`] and despawned on story swap
-/// like any content. Low-poly placeholders; real Blender meshes replace them later.
-#[derive(Component)]
-pub struct FloraFauna;
-
 /// A low-poly placeholder primitive for one flora/fauna prop.
 #[derive(Clone, Copy)]
-enum Prim {
+pub(crate) enum Prim {
     Cuboid(f32, f32, f32),
     Sphere(f32),
     Cylinder(f32, f32),
@@ -545,73 +629,18 @@ fn spawn_prop(
         })),
         transform,
         StageContent { tint },
-        FloraFauna,
         LayerTag(Layer::Props),
     ));
 }
 
-/// Spawns an arena story's three on-theme flora/fauna props near the walls
-/// (placeholders for ARE-18…26). A no-op for non-arena stories.
-fn spawn_arena_props(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    center: Vec2,
-    story: StoryId,
-) {
-    use Prim::{Capsule, Cone, Cuboid, Cylinder, Sphere};
-    type Tint = fn(&Theme) -> Color;
-    // (primitive, dx, dy from board centre, on-theme tint token)
-    let props: &[(Prim, f32, f32, Tint)] = match story {
-        StoryId::Hunter => &[
-            (Cuboid(0.55, 0.22, 0.4), -6.6, -2.4, |t: &Theme| t.surface_3()),
-            (Cylinder(0.07, 0.55), 6.8, -2.7, |t: &Theme| t.primary),
-            (Capsule(0.13, 0.3), 6.2, 2.9, |t: &Theme| t.text_muted()),
-        ],
-        StoryId::Alchemist => &[
-            (Cylinder(0.3, 0.06), -6.8, 2.1, |t: &Theme| t.primary),
-            (Sphere(0.16), 6.2, -2.7, |t: &Theme| t.surface_3()),
-            (Cylinder(0.05, 0.5), 6.6, 2.9, |t: &Theme| t.secondary),
-        ],
-        StoryId::Cardinal => &[
-            (Cone(0.22, 0.5), 6.8, -2.4, |t: &Theme| t.primary),
-            (Cylinder(0.06, 0.55), -6.6, 2.6, |t: &Theme| t.surface_3()),
-            (Sphere(0.16), -5.9, -2.8, |t: &Theme| t.warning),
-        ],
-        StoryId::Warrior => &[
-            (Cone(0.16, 0.55), 6.8, 2.4, |t: &Theme| t.surface_3()),
-            (Sphere(0.16), -6.2, -2.9, |t: &Theme| t.primary),
-            (Cylinder(0.3, 0.06), -6.6, 2.7, |t: &Theme| t.warning),
-        ],
-        StoryId::Thief => &[
-            (Sphere(0.28), 6.4, 2.9, |t: &Theme| t.primary),
-            (Cone(0.16, 0.3), -6.7, -2.6, |t: &Theme| t.surface_3()),
-            (Capsule(0.05, 0.5), -6.9, 2.1, |t: &Theme| t.secondary),
-        ],
-        StoryId::Bard => &[
-            (Cuboid(0.42, 0.28, 0.06), -6.2, 2.9, |t: &Theme| t.primary),
-            (Cylinder(0.26, 0.12), 6.6, -2.6, |t: &Theme| t.secondary),
-            (Capsule(0.09, 0.3), -6.8, -2.2, |t: &Theme| t.surface_3()),
-        ],
-        StoryId::Forager => &[
-            (Sphere(0.28), -6.6, 3.0, |t: &Theme| t.surface_3()),
-            (Sphere(0.17), 6.8, -2.6, |t: &Theme| t.warning),
-            (Cone(0.1, 0.5), -5.8, -2.8, |t: &Theme| t.accent),
-        ],
-        StoryId::Merchant => &[
-            (Sphere(0.28), 6.6, -2.4, |t: &Theme| t.warning),
-            (Cylinder(0.11, 0.55), -6.4, 2.9, |t: &Theme| t.surface_3()),
-            (Cuboid(0.22, 0.22, 0.22), -0.4, -3.1, |t: &Theme| t.accent),
-        ],
-        StoryId::Guildmaster => &[
-            // The home's warm hearth, a barrel, and a lantern post (safe + cosy).
-            (Cuboid(0.45, 0.3, 0.32), -6.6, -2.5, |t: &Theme| t.primary),
-            (Cylinder(0.16, 0.3), 6.6, -2.6, |t: &Theme| t.surface_3()),
-            (Capsule(0.05, 0.4), 6.4, 2.7, |t: &Theme| t.warning),
-        ],
-        _ => &[],
-    };
-    for &(prim, dx, dy, tint) in props {
-        spawn_prop(commands, meshes, materials, center, prim, Vec2::new(dx, dy), tint);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn board_center_is_the_grid_midpoint() {
+        // The single source of truth the atmosphere swarm also consumes — pin it so
+        // a grid-constant change can't silently drift the swarm off-centre.
+        assert_eq!(board_center(), Vec2::new(8.125, 3.75));
     }
 }

@@ -99,10 +99,10 @@ const TREE: &[Folder] = &[
             ("cardinal", StoryId::Cardinal, Icon::Donut), // Sanctum
             ("forager", StoryId::Forager, Icon::Mountain), // Mountain
             ("warrior", StoryId::Warrior, Icon::Hexagon), // Bastion
-            ("thief", StoryId::Thief, Icon::Triangle), // Pawnshop
+            ("thief", StoryId::Thief, Icon::Triangle),    // Pawnshop
             ("alchemist", StoryId::Alchemist, Icon::FlaskConical), // Crucible
-            ("merchant", StoryId::Merchant, Icon::Gem), // Casino
-            ("bard", StoryId::Bard, Icon::Music), // Gala
+            ("merchant", StoryId::Merchant, Icon::Gem),   // Casino
+            ("bard", StoryId::Bard, Icon::Music),         // Gala
         ],
     ),
 ];
@@ -273,7 +273,12 @@ fn build_topnav(
 /// The "unlock 3D camera" toggle (top-right of the canvas for 3D stories).
 /// Clicking flips every [`OrbitCamera`] between locked (home pose) and unlocked
 /// (mouse/trackpad orbit-pan-zoom); locking snaps back home.
-fn orbit_toggle(commands: &mut Commands, assets: &AssetServer, theme: &Theme, unlocked: bool) -> Entity {
+fn orbit_toggle(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    theme: &Theme,
+    unlocked: bool,
+) -> Entity {
     let bg = if unlocked {
         theme.selected_tint()
     } else {
@@ -303,16 +308,16 @@ fn orbit_toggle(commands: &mut Commands, assets: &AssetServer, theme: &Theme, un
     let glyph = icon(commands, assets, Icon::Rotate3d, 18.0, fg);
     commands.entity(button).add_children(&[glyph]);
     make_interactive(commands, theme, button, bg);
-    commands.entity(button).observe(
-        |_: On<Pointer<Click>>, mut cams: Query<&mut OrbitCamera>| {
+    commands
+        .entity(button)
+        .observe(|_: On<Pointer<Click>>, mut cams: Query<&mut OrbitCamera>| {
             for mut cam in &mut cams {
                 cam.unlocked = !cam.unlocked;
                 if !cam.unlocked {
                     cam.reset();
                 }
             }
-        },
-    );
+        });
     button
 }
 
@@ -344,11 +349,11 @@ fn collapse_toggle(
     let glyph = icon(commands, assets, glyph, 18.0, theme.text_2());
     commands.entity(button).add_children(&[glyph]);
     make_interactive(commands, theme, button, Color::NONE);
-    commands
-        .entity(button)
-        .observe(move |_: On<Pointer<Click>>, mut state: ResMut<SidebarCollapsed>| {
+    commands.entity(button).observe(
+        move |_: On<Pointer<Click>>, mut state: ResMut<SidebarCollapsed>| {
             state.0 = collapse;
-        });
+        },
+    );
     button
 }
 
@@ -391,7 +396,9 @@ fn build_sidebar(
         .id();
     let palette = icon(commands, assets, Icon::Palette, 14.0, theme.text_muted());
     let theme_title = label(commands, "Theme", scale::font_size::F00, theme.text_muted());
-    commands.entity(header).add_children(&[palette, theme_title]);
+    commands
+        .entity(header)
+        .add_children(&[palette, theme_title]);
 
     // --- Theme switcher: two collapsible groups — Game (arena) vs Extra ---
     let game_group = theme_group(commands, assets, theme, active, "Game", &ThemeId::GAME);
@@ -484,7 +491,11 @@ fn build_sidebar(
                     };
                 }
                 if let Ok(mut img) = images.get_mut(chevron) {
-                    img.image = if collapsed { down.clone() } else { right.clone() };
+                    img.image = if collapsed {
+                        down.clone()
+                    } else {
+                        right.clone()
+                    };
                 }
             },
         );
@@ -528,11 +539,11 @@ fn theme_button(commands: &mut Commands, theme: &Theme, id: ThemeId, selected: b
     let text = label(commands, id.label(), scale::font_size::F00, fg);
     commands.entity(button).add_children(&[text]);
     make_interactive(commands, theme, button, bg);
-    commands
-        .entity(button)
-        .observe(move |_: On<Pointer<Click>>, mut active: ResMut<ActiveTheme>| {
+    commands.entity(button).observe(
+        move |_: On<Pointer<Click>>, mut active: ResMut<ActiveTheme>| {
             active.0 = id;
-        });
+        },
+    );
     button
 }
 
@@ -652,7 +663,13 @@ fn folder_header(
     name: &str,
 ) -> (Entity, Entity) {
     // Lucide chevron (swapped down/right by the toggle observer) + a folder icon.
-    let chevron = icon(commands, assets, Icon::ChevronDown, 14.0, theme.text_muted());
+    let chevron = icon(
+        commands,
+        assets,
+        Icon::ChevronDown,
+        14.0,
+        theme.text_muted(),
+    );
     let folder = icon(commands, assets, Icon::Folder, 16.0, theme.text_muted());
     let text = label(commands, name, scale::font_size::F0, theme.text_2());
     let header = commands
@@ -669,7 +686,9 @@ fn folder_header(
             BackgroundColor(Color::NONE),
         ))
         .id();
-    commands.entity(header).add_children(&[chevron, folder, text]);
+    commands
+        .entity(header)
+        .add_children(&[chevron, folder, text]);
     make_interactive(commands, theme, header, Color::NONE);
     (header, chevron)
 }
@@ -716,26 +735,24 @@ fn leaf_row(
         .id();
     commands.entity(row).add_children(&[glyph, text]);
     make_interactive(commands, theme, row, base);
-    commands
-        .entity(row)
-        .observe(
-            move |_: On<Pointer<Click>>,
-                  mut current: ResMut<CurrentStory>,
-                  mut active: ResMut<ActiveTheme>| {
-                // Guard so re-clicking the active leaf doesn't re-fire the change
-                // and needlessly despawn/reload the 3D content (a glTF reload flash).
-                if current.0 != Some(story) {
-                    current.0 = Some(story);
-                }
-                // Each arena opens in its matched theme, so the boss reads
-                // on-theme. Non-arena stories leave the theme as-is.
-                if let Some(t) = story.arena_theme()
-                    && active.0 != t
-                {
-                    active.0 = t;
-                }
-            },
-        );
+    commands.entity(row).observe(
+        move |_: On<Pointer<Click>>,
+              mut current: ResMut<CurrentStory>,
+              mut active: ResMut<ActiveTheme>| {
+            // Guard so re-clicking the active leaf doesn't re-fire the change
+            // and needlessly despawn/reload the 3D content (a glTF reload flash).
+            if current.0 != Some(story) {
+                current.0 = Some(story);
+            }
+            // Each arena opens in its matched theme, so the boss reads
+            // on-theme. Non-arena stories leave the theme as-is.
+            if let Some(t) = story.arena_theme()
+                && active.0 != t
+            {
+                active.0 = t;
+            }
+        },
+    );
     row
 }
 

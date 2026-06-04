@@ -12,7 +12,7 @@
 //! cycled with the `T` key). [`spawn_hollow_boss`] is the one helper a story arm
 //! calls to drop a shell + animated core onto the board.
 
-use std::f32::consts::{FRAC_PI_2, FRAC_PI_3, PI};
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_3};
 
 use arenic_game::theme::{ActiveTheme, Theme};
 use bevy::prelude::*;
@@ -94,17 +94,6 @@ pub struct HollowLight {
     pub rest: Transform,
 }
 
-/// Tags a Gala constellation member with its 0-based slot, so the 2-minute
-/// orchestration in [`animate_hollow_lights`] lights each primitive in sequence
-/// (the cycle becomes visible across the installation).
-#[derive(Component)]
-pub struct GalaMember {
-    pub slot: u8,
-}
-
-/// Length of the Gala loop (the game's 2-minute record/replay cycle), in seconds.
-const GALA_CYCLE: f32 = 120.0;
-
 /// Adds the tier control + core animation. Registered alongside the stage.
 pub struct HollowLightPlugin;
 
@@ -181,7 +170,6 @@ fn animate_hollow_lights(
     active: Res<ActiveTheme>,
     mut cores: Query<(
         &HollowLight,
-        Option<&GalaMember>,
         &mut Transform,
         &MeshMaterial3d<StandardMaterial>,
     )>,
@@ -189,33 +177,17 @@ fn animate_hollow_lights(
 ) {
     let theme = active.palette();
     let p = time.elapsed_secs() * tier.speed();
-    let cycle = time.elapsed_secs() % GALA_CYCLE;
     let gain = tier.intensity();
-    for (core, gala, mut tf, mat) in &mut cores {
-        let (mut intensity, offset, rot) = animate(core.behavior, p);
-        // Gala members hump bright only in their slot of the 2-minute score.
-        if let Some(g) = gala {
-            intensity *= gala_window(cycle, g.slot);
-        }
+    for (core, mut tf, mat) in &mut cores {
+        let (intensity, offset, rot) = animate(core.behavior, p);
         tf.translation = core.rest.translation + offset;
         tf.rotation = core.rest.rotation * rot;
         tf.scale = core.rest.scale;
         if let Some(m) = materials.get_mut(&mat.0) {
             let lin = (core.color)(&theme).to_linear();
-            m.emissive = LinearRgba::rgb(lin.red, lin.green, lin.blue) * (intensity * gain * EMISSIVE);
+            m.emissive =
+                LinearRgba::rgb(lin.red, lin.green, lin.blue) * (intensity * gain * EMISSIVE);
         }
-    }
-}
-
-/// The Gala 2-minute "score": each slot's core humps bright during its
-/// 15-second window (8 slots × 15 s = 120 s) and idles dim otherwise, so the loop
-/// reads across the whole constellation.
-fn gala_window(cycle: f32, slot: u8) -> f32 {
-    let local = cycle - (GALA_CYCLE / 8.0) * slot as f32;
-    if (0.0..GALA_CYCLE / 8.0).contains(&local) {
-        0.2 + 0.8 * (PI * local / (GALA_CYCLE / 8.0)).sin()
-    } else {
-        0.2
     }
 }
 
@@ -267,5 +239,37 @@ fn animate(behavior: LightBehavior, p: f32) -> (f32, Vec3, Quat) {
             Vec3::new(0.02 * (p * 11.0).sin(), 0.02 * (p * 9.0).cos(), 0.0),
             Quat::IDENTITY,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EVERY_BEHAVIOR: [LightBehavior; 8] = [
+        LightBehavior::ObeliskBlade,
+        LightBehavior::CauldronRise,
+        LightBehavior::HaloFill,
+        LightBehavior::PrismBlock,
+        LightBehavior::WedgeBeam,
+        LightBehavior::CapsulePulse,
+        LightBehavior::ZigguratGrow,
+        LightBehavior::GeodeShimmer,
+    ];
+
+    #[test]
+    fn core_intensity_is_never_negative() {
+        // The emissive multiplier feeds bloom; a negative value would invert the
+        // glow. Every telegraph must stay >= 0 across its whole cycle.
+        for (b, behavior) in EVERY_BEHAVIOR.into_iter().enumerate() {
+            for i in 0..400 {
+                let p = i as f32 * 0.25;
+                let (intensity, _, _) = animate(behavior, p);
+                assert!(
+                    intensity >= 0.0,
+                    "behavior #{b} gave negative intensity {intensity}"
+                );
+            }
+        }
     }
 }

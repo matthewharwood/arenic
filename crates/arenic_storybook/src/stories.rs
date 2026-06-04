@@ -71,18 +71,7 @@ impl StoryId {
     /// the whole stage) in this palette, so each boss reads on-theme. Returns
     /// `None` for the non-arena stories (styles, guildmaster, generic boss).
     pub fn arena_theme(self) -> Option<ThemeId> {
-        Some(match self {
-            StoryId::Hunter => ThemeId::TokyoNight,
-            StoryId::Guildmaster => ThemeId::Coffee,
-            StoryId::Cardinal => ThemeId::Luxury,
-            StoryId::Forager => ThemeId::Forest,
-            StoryId::Warrior => ThemeId::GruvboxDark,
-            StoryId::Thief => ThemeId::AyuDark,
-            StoryId::Alchemist => ThemeId::Abyss,
-            StoryId::Merchant => ThemeId::RosePine,
-            StoryId::Bard => ThemeId::Synthwave,
-            _ => return None,
-        })
+        crate::arena::spec(self).map(|s| s.theme)
     }
 }
 
@@ -126,49 +115,73 @@ pub fn render(
              (the home is the one bright, safe arena). Unlock the camera to orbit.",
         ),
         StoryId::Hunter => stage_story(
-            commands, content, theme, stage,
+            commands,
+            content,
+            theme,
+            stage,
             "Labyrinth / Hunter \u{2014} Hollow Obelisk. A dark hollow relic; a blade of \
              light sweeps the inner walls as a sniper telegraph. The void glows, the shell \
              stays dark. Press [T] to cycle Normal/Heroic/Mythic; unlock the camera to orbit.",
         ),
         StoryId::Alchemist => stage_story(
-            commands, content, theme, stage,
+            commands,
+            content,
+            theme,
+            stage,
             "Crucible / Alchemist \u{2014} Truncated Cone (the vessel). Liquid light rises \
              and falls inside the vessel. The void glows, the shell stays dark. Press [T] to \
              cycle Normal/Heroic/Mythic; unlock the camera to orbit.",
         ),
         StoryId::Cardinal => stage_story(
-            commands, content, theme, stage,
+            commands,
+            content,
+            theme,
+            stage,
             "Sanctum / Cardinal \u{2014} Torus Halo. The light lives inside the ring's hole; \
              it fills, resolves, then resets (ability-ready telegraph). Press [T] to cycle \
              Normal/Heroic/Mythic; unlock the camera to orbit.",
         ),
         StoryId::Warrior => stage_story(
-            commands, content, theme, stage,
+            commands,
+            content,
+            theme,
+            stage,
             "Bastion / Warrior \u{2014} Hexagonal Prism (bunker). A compressed furnace core \
              lights a blocked direction. The void glows, the shell stays dark. Press [T] to \
              cycle Normal/Heroic/Mythic; unlock the camera to orbit.",
         ),
         StoryId::Thief => stage_story(
-            commands, content, theme, stage,
+            commands,
+            content,
+            theme,
+            stage,
             "Pawnshop / Thief \u{2014} Triangular Prism (wedge). A narrow beam projects forward \
              \u{2014} a slit in reality, not a lamp. Press [T] to cycle Normal/Heroic/Mythic; \
              unlock the camera to orbit.",
         ),
         StoryId::Bard => stage_story(
-            commands, content, theme, stage,
+            commands,
+            content,
+            theme,
+            stage,
             "Gala / Bard \u{2014} Capsule Resonator. A central filament pulses on the beat \
              \u{2014} sonic geometry. The void glows, the shell stays dark. Press [T] to cycle \
              Normal/Heroic/Mythic; unlock the camera to orbit.",
         ),
         StoryId::Forager => stage_story(
-            commands, content, theme, stage,
+            commands,
+            content,
+            theme,
+            stage,
             "Mountain / Forager \u{2014} Stepped Pyramid (ziggurat). Light grows upward from \
              the central shaft. The void glows, the shell stays dark. Press [T] to cycle \
              Normal/Heroic/Mythic; unlock the camera to orbit.",
         ),
         StoryId::Merchant => stage_story(
-            commands, content, theme, stage,
+            commands,
+            content,
+            theme,
+            stage,
             "Casino / Merchant \u{2014} Hollow Icosphere (geode). A crystalline core shimmers \
              semi-randomly \u{2014} luck and volatility. Press [T] to cycle Normal/Heroic/\
              Mythic; unlock the camera to orbit.",
@@ -416,7 +429,12 @@ fn elevation(commands: &mut Commands, content: Entity, theme: &Theme) {
             ),
         ))
         .id();
-    let nb_cap = label(commands, "hard 5,5,0", scale::font_size::F00, theme.text_muted());
+    let nb_cap = label(
+        commands,
+        "hard 5,5,0",
+        scale::font_size::F00,
+        theme.text_muted(),
+    );
     commands.entity(nb_col).add_children(&[nb, nb_cap]);
     commands.entity(grid).add_children(&[nb_col]);
 
@@ -450,7 +468,8 @@ fn components(commands: &mut Commands, content: Entity, theme: &Theme) {
                     Val::Px(0.0),
                 ),
                 UiTransform::default(),
-                Interactive::flat(bg, hover, active, theme.focus_ring()).with_shadow(theme.text_1(), 3.0),
+                Interactive::flat(bg, hover, active, theme.focus_ring())
+                    .with_shadow(theme.text_1(), 3.0),
                 hidden_outline(),
             ))
             .id();
@@ -459,9 +478,16 @@ fn components(commands: &mut Commands, content: Entity, theme: &Theme) {
         b
     };
     let primary = btn(commands, theme.primary, theme.primary_content, "Primary");
-    let secondary = btn(commands, theme.secondary, theme.secondary_content, "Secondary");
+    let secondary = btn(
+        commands,
+        theme.secondary,
+        theme.secondary_content,
+        "Secondary",
+    );
     let soft = btn(commands, theme.primary_soft(), theme.primary, "Soft");
-    commands.entity(buttons).add_children(&[primary, secondary, soft]);
+    commands
+        .entity(buttons)
+        .add_children(&[primary, secondary, soft]);
 
     // Status badges (soft fill + status-coloured text, pill radius).
     let badges = row(commands, scale::space::XS);
@@ -484,7 +510,9 @@ fn components(commands: &mut Commands, content: Entity, theme: &Theme) {
     let b_ok = badge(commands, theme.success_soft(), theme.success, "success");
     let b_warn = badge(commands, theme.warning_soft(), theme.warning, "warning");
     let b_err = badge(commands, theme.error_soft(), theme.danger(), "error");
-    commands.entity(badges).add_children(&[b_info, b_ok, b_warn, b_err]);
+    commands
+        .entity(badges)
+        .add_children(&[b_info, b_ok, b_warn, b_err]);
 
     // A card using surface + border + radius-box tokens.
     let card = commands

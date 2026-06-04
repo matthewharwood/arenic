@@ -59,7 +59,10 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let cdist = distance(uv, vec2<f32>(0.5, 0.5));
 
     let p = uv * scale + drift * (t * speed * 6.0);
-    var field = fbm(p);
+    // Each style assigns `field` itself; we don't seed it with fbm(p) here because
+    // every branch overwrites it — that seed was a full 5-octave noise per fragment
+    // thrown away on two full-screen planes.
+    var field = 0.0;
 
     if (style < 0.5) {
         // 0 — banded stratus: soft + wide (spread out, blurred, faint)

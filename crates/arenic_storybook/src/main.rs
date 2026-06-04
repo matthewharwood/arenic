@@ -9,6 +9,7 @@
 //! cargo run -p arenic_storybook
 //! ```
 
+mod arena;
 mod foreground;
 mod hollow;
 mod layers;

@@ -1,20 +1,25 @@
-# Arena Foreground Sky-Swarm
+# Arena Sky-Swarm (under-floor)
 
-The **foreground** is the nearest moving layer in each arena's atmosphere stack
-(camera → **foreground swarm** → near-haze plane → board/boss/flora-fauna →
-translucent floor → skybox). It is a small, drifting cloud of **discrete motes**
-— the "fauna / probes in the sky" — that adds texture and depth between the board
-and the camera **without ever interrupting play**.
+The **sky-swarm** is the *discrete* moving layer of each arena's atmosphere — a
+small, drifting cloud of **motes** (the "fauna / probes in the sky") that adds
+texture and depth **without ever interrupting play**. It rides UNDER the
+translucent liquid-glass floor, so it goes *around and under* the board but never
+*through* it, seen glowing softly up through the glass. The full atmosphere stack,
+camera → sky, is:
+
+> camera → **foreground haze plane** → **liquid-glass floor** →
+> board / boss / flora-fauna → **sky-swarm (under the floor)** → **skybox**
 
 Built in `crates/arenic_storybook/src/foreground.rs` (the swarm section, beside
 the cloud/fog shader); driven by the `ForegroundPlugin`. This is the discrete
-counterpart to the `arena_fog.wgsl` haze planes.
+counterpart to the `arena_fog.wgsl` haze planes. The per-arena swarm row lives in
+the single `ArenaSpec` table (`arena.rs`), beside its theme / voices / boss / props.
 
 ## Canonical mapping (2026-06-04 remap)
 
 Keyed by **class** (the stable join). Story names in `arenic_storybook` are
-canonical; `_docs/arena_model.go` + the Linear issues are still on the **old**
-pairings and remain pending a full regen.
+canonical and `_docs/arena_model.go` is regenerated to this grid; the Linear
+issues (ARE-18…26) are still pending reconciliation.
 
 | idx | Class | Arena | Theme |
 |---|---|---|---|
@@ -31,16 +36,17 @@ pairings and remain pending a full regen.
 ## The grammar (cohesion — why the nine read as one world)
 
 - **One system, data-driven.** All arenas use the same `SwarmMember` +
-  `swarm_offset` driver (mirrors the hollow-light pattern): per-arena rows of
-  `(motion, silhouette, count, scale)`.
+  `swarm_offset` driver (mirrors the hollow-light pattern); each arena's
+  `SwarmSpec { motion, mote, count, scale }` is one field of its `ArenaSpec` row.
 - **Shared silhouette families.** `Mote::{Spark, Flake, Dart, Bubble}` — a small
   vocabulary reused across arenas (like the model's moth/beetle/newt families).
 - **Shared placement + scale.** Small (≈0.06–0.11 u), translucent (α 0.55) +
   lightly emissive (blooms via the stage's HDR+Bloom), **sparse** (10–16), in a
-  **high sky ring at z ≈ 5.5** — far above the boss (z ≤ 2.5) and biased to the
-  board's outer band (`r ∈ [0.65, 1.05]` of a 7.5 × 3.4 ellipse) so the central
-  play field stays clear. Deterministic golden-angle spread + per-index phase
-  stagger (no RNG) → a "meaningful but not distracting" order.
+  **low ring UNDER the floor at `z = -1.4`** — riding `z ∈ [-2.3, -0.5]`, always
+  below the floor plane `z = -0.02` (a compile-time invariant) — biased to the
+  board's outer band (`r ∈ [0.65, 1.05]` of a 7.5 × 3.4 ellipse) so it glows up
+  through the liquid glass without occluding the boss. Deterministic golden-angle
+  spread + per-index phase stagger (no RNG) → a "meaningful but not distracting" order.
 - **Theme colour.** Every swarm tints to its arena's `theme.primary` accent, so
   it re-tones on theme switch and is per-arena distinct because the themes are.
 
@@ -58,16 +64,18 @@ pairings and remain pending a full regen.
 | Casino · Merchant | tumbling **coins** (`Flake`) | `TumbleArc` | end-over-end tumble (axis spin) + tight mechanical arc |
 | Gala · Bard | **confetti** (`Flake`) | `BeatDrift` | drift + a synchronized on-beat (`sin⁴`) upward pluck |
 
-**Non-distracting guarantees:** high z (separated layer), small + translucent +
-sparse, slow (global `0.5×` time factor), outer-ring biased (boss zone clear),
-`NotShadowCaster`/`NotShadowReceiver` (no shadows on the board).
+**Non-distracting guarantees:** under the floor (a separated layer seen softly
+through the glass), small + translucent + sparse, slow (global `0.5×` time
+factor), outer-ring biased (boss zone clear), `NotShadowCaster`/`NotShadowReceiver`.
 
 ## Tuning knobs
 
-- Per arena: the `arena_swarm()` row — `(motion, Mote, count, scale)`.
-- Per motion: `swarm_offset()` arm.
-- Global: `0.5×` time factor (`animate_swarm`), ring radii + `z = 5.5` + `amp`
-  (`respawn_swarm`), α `0.55` + emissive `1.6×` (`swarm_material`).
+- Per arena: the `swarm` field of the arena's `ArenaSpec` row in `arena.rs` —
+  `SwarmSpec { motion, mote, count, scale }`.
+- Per motion: the `swarm_offset()` arm.
+- Global: the `SWARM_*` consts in `foreground.rs` — `SWARM_TIME_SCALE` (0.5×),
+  `SWARM_RING_X/Y`, `SWARM_Z = -1.4`, `SWARM_AMP` — plus α `0.55` + emissive
+  `1.6×` (`swarm_material`).
 
 ## Future
 
@@ -75,5 +83,5 @@ sparse, slow (global `0.5×` time factor), outer-ring biased (boss zone clear),
   primitive `Mote` meshes; the system is mesh-agnostic.
 - Per-arena 2nd accent colour (the model rations two per arena) — currently every
   swarm uses `theme.primary`.
-- Reconcile `_docs/arena_model.go` + Linear ARE-18…26 to the canonical remap and
-  fold these swarm specs into each arena's `Foreground` axis.
+- Reconcile the Linear ARE-18…26 issues to the canonical remap (`arena_model.go`
+  and the `ArenaSpec` table are already on it).
