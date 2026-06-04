@@ -218,48 +218,50 @@ pub enum ThemeId {
 
 impl ThemeId {
     /// The nine themes bound to an arena — each arena renders in one of these.
-    /// Ordered by arena index (Labyrinth … Gala).
+    /// Ordered by arena index (Labyrinth … Gala). Each class's theme travels with
+    /// the class to its arena (see the rulebook's 3×3 grid).
     pub const GAME: [ThemeId; 9] = [
-        ThemeId::TokyoNight,  // 0 Labyrinth
-        ThemeId::Abyss,       // 1 Guild House
-        ThemeId::Luxury,      // 2 Sanctum
-        ThemeId::GruvboxDark, // 3 Mountain
-        ThemeId::AyuDark,     // 4 Bastion
-        ThemeId::Synthwave,   // 5 Pawnshop
-        ThemeId::Coffee,      // 6 Crucible
-        ThemeId::RosePine,    // 7 Casino
-        ThemeId::Gala,        // 8 Gala
+        ThemeId::TokyoNight,  // 0 Labyrinth   — Hunter
+        ThemeId::Coffee,      // 1 Guild House — Guildmaster (warm hearth / home)
+        ThemeId::Luxury,      // 2 Sanctum     — Cardinal
+        ThemeId::Forest,      // 3 Mountain    — Forager (green, nature/foraging)
+        ThemeId::GruvboxDark, // 4 Bastion     — Warrior (forge fortress)
+        ThemeId::AyuDark,     // 5 Pawnshop    — Thief
+        ThemeId::Abyss,       // 6 Crucible    — Alchemist (the vessel)
+        ThemeId::RosePine,    // 7 Casino      — Merchant
+        ThemeId::Synthwave,   // 8 Gala        — Bard (the festival)
     ];
 
-    /// Catalogue themes not (yet) bound to an arena. Kept available, never deleted.
+    /// Catalogue themes not bound to an arena. Kept available, never deleted —
+    /// includes the retired bespoke `Gala` neon (Gala is the Bard's arena now).
     pub const EXTRA: [ThemeId; 7] = [
         ThemeId::Light,
         ThemeId::Dark,
         ThemeId::Cyberpunk,
-        ThemeId::Forest,
         ThemeId::Lofi,
         ThemeId::Dracula,
         ThemeId::Catppuccin,
+        ThemeId::Gala,
     ];
 
     /// Every theme, in display order: the nine arena themes, then the extras.
     pub const ALL: [ThemeId; 16] = [
         ThemeId::TokyoNight,
-        ThemeId::Abyss,
+        ThemeId::Coffee,
         ThemeId::Luxury,
+        ThemeId::Forest,
         ThemeId::GruvboxDark,
         ThemeId::AyuDark,
-        ThemeId::Synthwave,
-        ThemeId::Coffee,
+        ThemeId::Abyss,
         ThemeId::RosePine,
-        ThemeId::Gala,
+        ThemeId::Synthwave,
         ThemeId::Light,
         ThemeId::Dark,
         ThemeId::Cyberpunk,
-        ThemeId::Forest,
         ThemeId::Lofi,
         ThemeId::Dracula,
         ThemeId::Catppuccin,
+        ThemeId::Gala,
     ];
 
     /// Whether this theme is bound to an arena (in [`ThemeId::GAME`]).

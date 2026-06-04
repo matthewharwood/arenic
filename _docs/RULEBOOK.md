@@ -276,15 +276,15 @@ Arenic features **9 distinct arenas** arranged in a 3×3 grid layout. Each arena
 
 | Index | Arena Name | Grid Position | Theme |
 |-------|------------|---------------|-------|
-| **0** | **Labyrinth** | Top-Left (0,0) | Hunter-focused with precision and traps |
-| **1** | **Guild House** | Top-Center (1,0) | Alchemist-focused with transformation |
-| **2** | **Sanctum** | Top-Right (2,0) | Cardinal-focused with divine magic |
-| **3** | **Mountain** | Middle-Left (0,1) | Warrior-focused with strength and defense |
-| **4** | **Bastion** | Middle-Center (1,1) | Thief-focused with stealth and mobility |
-| **5** | **Pawnshop** | Middle-Right (2,1) | Bard-focused with rhythm and support |
-| **6** | **Crucible** | Bottom-Left (0,2) | Forager-focused with terrain manipulation |
-| **7** | **Casino** | Bottom-Center (1,2) | Merchant-focused with economic warfare |
-| **8** | **Gala** | Bottom-Right (2,2) | Mixed themes and ultimate challenges |
+| **0** | **Labyrinth** | Top-Left (0,0) | **Hunter** — precision, traps, sightlines |
+| **1** | **Guild House** | Top-Center (1,0) | **Guildmaster** — the guild's home & safe hearth (not a combat arena) |
+| **2** | **Sanctum** | Top-Right (2,0) | **Cardinal** — divine magic |
+| **3** | **Mountain** | Middle-Left (0,1) | **Forager** — terrain, geology, foraging |
+| **4** | **Bastion** | Middle-Center (1,1) | **Warrior** — strength & defense (the fortress) |
+| **5** | **Pawnshop** | Middle-Right (2,1) | **Thief** — stealth & fencing |
+| **6** | **Crucible** | Bottom-Left (0,2) | **Alchemist** — transformation (the vessel) |
+| **7** | **Casino** | Bottom-Center (1,2) | **Merchant** — economic warfare |
+| **8** | **Gala** | Bottom-Right (2,2) | **Bard** — rhythm & performance (the festival) |
 
 #### Arena Navigation
 ```
@@ -329,15 +329,15 @@ Grid Layout (3×3):
 - **No Enrage Timer**: Bosses reset each cycle without becoming stronger over time
 
 ### Arena-Specific Boss Types
-0. **Labyrinth**: Features a Hunter-class boss with precision ranged attacks and deadly trap mechanics
-1. **Guild House**: Alchemist boss using elemental transformation and area denial through toxic pools
-2. **Sanctum**: Cardinal boss with healing denial, purification attacks, and divine shields
-3. **Mountain**: Warrior boss with heavily armored defenses, charge attacks, and area damage
-4. **Bastion**: Thief boss employing stealth mechanics, teleportation strikes, and ambush tactics
-5. **Pawnshop**: Bard boss requiring timing-sensitive responses to rhythmic attack patterns
-6. **Crucible**: Forager boss that dynamically changes the battlefield through terrain manipulation
-7. **Casino**: Merchant boss with risk-reward mechanics and economic warfare strategies
-8. **Gala**: Ultimate challenge arena featuring mixed boss mechanics from all other arenas
+0. **Labyrinth** (Hunter): precision ranged attacks and deadly trap mechanics — the Hollow Obelisk
+1. **Guild House** (Guildmaster): the guild's **home** — a safe hearth, not a true boss; an abstract house/pyramid object
+2. **Sanctum** (Cardinal): healing denial, purification attacks, and divine shields — the Torus Halo
+3. **Mountain** (Forager): dynamically reshapes the battlefield through terrain manipulation and foraging — the Stepped Pyramid / Ziggurat
+4. **Bastion** (Warrior): heavily armored defenses, charge attacks, and area damage — the Hexagonal Prism (the fortress)
+5. **Pawnshop** (Thief): stealth mechanics, teleportation strikes, and ambush tactics — the Triangular Prism (wedge)
+6. **Crucible** (Alchemist): elemental transformation and area denial through toxic pools — the Truncated Cone (the vessel)
+7. **Casino** (Merchant): risk-reward mechanics and economic warfare strategies — the Hollow Icosphere (geode)
+8. **Gala** (Bard): timing-sensitive responses to rhythmic attack patterns — the Capsule Resonator (the festival)
 
 ---
 

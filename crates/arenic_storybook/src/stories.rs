@@ -1,9 +1,10 @@
 //! The stories rendered into the canvas. The `styles/*` stories are the design-
-//! token style guide; `units/guildmaster` is a blank placeholder for a real game
-//! piece. Each builder fills a `content` column using the active [`Theme`].
+//! token style guide; the `units/*` stories (`guildmaster`, `boss`) drop a real
+//! `arenic_game` piece onto the shared top-down 3D stage (see [`crate::stage`]).
+//! Each builder fills a `content` column using the active [`Theme`].
 
 use arenic_game::interaction::{Interactive, hidden_outline};
-use arenic_game::theme::{Theme, scale};
+use arenic_game::theme::{Theme, ThemeId, scale};
 use bevy::prelude::*;
 
 use crate::widgets::{self, column, heading, hex, label, row, swatch, wrap};
@@ -17,7 +18,16 @@ pub enum StoryId {
     Radii,
     Elevation,
     Components,
+    // The nine arenas, in 3×3 grid order (class — arena); see the rulebook.
     Guildmaster,
+    Hunter,
+    Alchemist,
+    Cardinal,
+    Warrior,
+    Thief,
+    Bard,
+    Forager,
+    Merchant,
 }
 
 impl StoryId {
@@ -29,18 +39,55 @@ impl StoryId {
             StoryId::Radii => "Radii",
             StoryId::Elevation => "Elevation",
             StoryId::Components => "Components",
-            StoryId::Guildmaster => "Guildmaster",
+            StoryId::Guildmaster => "Guildmaster — Guild House",
+            StoryId::Hunter => "Hunter — Labyrinth",
+            StoryId::Alchemist => "Alchemist — Crucible",
+            StoryId::Cardinal => "Cardinal — Sanctum",
+            StoryId::Warrior => "Warrior — Bastion",
+            StoryId::Thief => "Thief — Pawnshop",
+            StoryId::Bard => "Bard — Gala",
+            StoryId::Forager => "Forager — Mountain",
+            StoryId::Merchant => "Merchant — Casino",
         }
     }
 
     /// Whether this story renders the 3D stage (and so wants the orbit control).
+    /// Everything outside the `styles/*` design-token set is a 3D unit/boss
+    /// story; the stage itself (camera/light/shadow/RTT) is shared — these
+    /// stories supply only the content on the board (see [`crate::stage`]).
     pub fn has_3d_stage(self) -> bool {
-        matches!(self, StoryId::Guildmaster)
+        !matches!(
+            self,
+            StoryId::Colors
+                | StoryId::Typography
+                | StoryId::Spacing
+                | StoryId::Radii
+                | StoryId::Elevation
+                | StoryId::Components
+        )
+    }
+
+    /// The matched theme for an arena story — opening it renders the boss (and
+    /// the whole stage) in this palette, so each boss reads on-theme. Returns
+    /// `None` for the non-arena stories (styles, guildmaster, generic boss).
+    pub fn arena_theme(self) -> Option<ThemeId> {
+        Some(match self {
+            StoryId::Hunter => ThemeId::TokyoNight,
+            StoryId::Guildmaster => ThemeId::Coffee,
+            StoryId::Cardinal => ThemeId::Luxury,
+            StoryId::Forager => ThemeId::Forest,
+            StoryId::Warrior => ThemeId::GruvboxDark,
+            StoryId::Thief => ThemeId::AyuDark,
+            StoryId::Alchemist => ThemeId::Abyss,
+            StoryId::Merchant => ThemeId::RosePine,
+            StoryId::Bard => ThemeId::Synthwave,
+            _ => return None,
+        })
     }
 }
 
 /// Renders `story` (or a placeholder) into the `content` column. `stage` is the
-/// 3D render-to-texture the `guildmaster` story displays.
+/// shared 3D render-to-texture that the `units/*` (3D) stories display.
 pub fn render(
     commands: &mut Commands,
     content: Entity,
@@ -69,7 +116,63 @@ pub fn render(
         StoryId::Radii => radii(commands, content, theme),
         StoryId::Elevation => elevation(commands, content, theme),
         StoryId::Components => components(commands, content, theme),
-        StoryId::Guildmaster => guildmaster(commands, content, theme, stage),
+        StoryId::Guildmaster => stage_story(
+            commands,
+            content,
+            theme,
+            stage,
+            "Guild House / Guildmaster \u{2014} home. The guild's safe hearth, not a true \
+             boss: a calm pyramid \u{2018}home\u{2019} at centre on the warm Coffee theme \
+             (the home is the one bright, safe arena). Unlock the camera to orbit.",
+        ),
+        StoryId::Hunter => stage_story(
+            commands, content, theme, stage,
+            "Labyrinth / Hunter \u{2014} Hollow Obelisk. A dark hollow relic; a blade of \
+             light sweeps the inner walls as a sniper telegraph. The void glows, the shell \
+             stays dark. Press [T] to cycle Normal/Heroic/Mythic; unlock the camera to orbit.",
+        ),
+        StoryId::Alchemist => stage_story(
+            commands, content, theme, stage,
+            "Crucible / Alchemist \u{2014} Truncated Cone (the vessel). Liquid light rises \
+             and falls inside the vessel. The void glows, the shell stays dark. Press [T] to \
+             cycle Normal/Heroic/Mythic; unlock the camera to orbit.",
+        ),
+        StoryId::Cardinal => stage_story(
+            commands, content, theme, stage,
+            "Sanctum / Cardinal \u{2014} Torus Halo. The light lives inside the ring's hole; \
+             it fills, resolves, then resets (ability-ready telegraph). Press [T] to cycle \
+             Normal/Heroic/Mythic; unlock the camera to orbit.",
+        ),
+        StoryId::Warrior => stage_story(
+            commands, content, theme, stage,
+            "Bastion / Warrior \u{2014} Hexagonal Prism (bunker). A compressed furnace core \
+             lights a blocked direction. The void glows, the shell stays dark. Press [T] to \
+             cycle Normal/Heroic/Mythic; unlock the camera to orbit.",
+        ),
+        StoryId::Thief => stage_story(
+            commands, content, theme, stage,
+            "Pawnshop / Thief \u{2014} Triangular Prism (wedge). A narrow beam projects forward \
+             \u{2014} a slit in reality, not a lamp. Press [T] to cycle Normal/Heroic/Mythic; \
+             unlock the camera to orbit.",
+        ),
+        StoryId::Bard => stage_story(
+            commands, content, theme, stage,
+            "Gala / Bard \u{2014} Capsule Resonator. A central filament pulses on the beat \
+             \u{2014} sonic geometry. The void glows, the shell stays dark. Press [T] to cycle \
+             Normal/Heroic/Mythic; unlock the camera to orbit.",
+        ),
+        StoryId::Forager => stage_story(
+            commands, content, theme, stage,
+            "Mountain / Forager \u{2014} Stepped Pyramid (ziggurat). Light grows upward from \
+             the central shaft. The void glows, the shell stays dark. Press [T] to cycle \
+             Normal/Heroic/Mythic; unlock the camera to orbit.",
+        ),
+        StoryId::Merchant => stage_story(
+            commands, content, theme, stage,
+            "Casino / Merchant \u{2014} Hollow Icosphere (geode). A crystalline core shimmers \
+             semi-randomly \u{2014} luck and volatility. Press [T] to cycle Normal/Heroic/\
+             Mythic; unlock the camera to orbit.",
+        ),
     }
 }
 
@@ -413,15 +516,18 @@ fn components(commands: &mut Commands, content: Entity, theme: &Theme) {
         .add_children(&[buttons, badges, card]);
 }
 
-fn guildmaster(commands: &mut Commands, content: Entity, theme: &Theme, stage: &Handle<Image>) {
-    let note = label(
-        commands,
-        "Top-down arena (UNITS_AND_SCALE §3): the 66\u{00D7}31 board under the \
-         near-orthographic camera, with the Guildmaster as a one-tile token at \
-         centre, lit by one light.",
-        scale::font_size::F0,
-        theme.text_2(),
-    );
+/// Renders a 3D story: a caption plus a framed 16:9 viewport showing the live
+/// render of the shared top-down [`crate::stage`]. Every 3D story reuses this —
+/// the content on the board is what differs, and that lives in the stage, not
+/// here — so adding a story duplicates **none** of the viewport scaffolding.
+fn stage_story(
+    commands: &mut Commands,
+    content: Entity,
+    theme: &Theme,
+    stage: &Handle<Image>,
+    note_text: &str,
+) {
+    let note = label(commands, note_text, scale::font_size::F0, theme.text_2());
 
     // Framed 16:9 viewport showing the live render of the top-down stage.
     let (w, h) = (768.0, 432.0);

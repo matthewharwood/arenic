@@ -9,6 +9,9 @@
 //! cargo run -p arenic_storybook
 //! ```
 
+mod foreground;
+mod hollow;
+mod layers;
 mod stage;
 mod stories;
 mod storybook;
@@ -27,6 +30,9 @@ fn main() -> AppExit {
         .add_plugins(DefaultFontPlugin)
         .add_plugins(InteractionPlugin)
         .add_plugins(OrbitCameraPlugin)
+        .add_plugins(hollow::HollowLightPlugin)
+        .add_plugins(foreground::ForegroundPlugin)
+        .add_plugins(layers::LayersPlugin)
         .add_systems(Startup, spawn_camera)
         .add_plugins(StorybookPlugin)
         .run()

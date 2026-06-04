@@ -32,7 +32,9 @@ impl Plugin for StorybookPlugin {
                     rebuild.run_if(
                         resource_changed::<ActiveTheme>
                             .or(resource_changed::<CurrentStory>)
-                            .or(resource_changed::<SidebarCollapsed>),
+                            .or(resource_changed::<SidebarCollapsed>)
+                            .or(resource_changed::<crate::hollow::Tier>)
+                            .or(resource_changed::<crate::layers::LayerVisibility>),
                     ),
                     scroll_canvas,
                 ),
@@ -44,9 +46,10 @@ impl Plugin for StorybookPlugin {
 /// content (see `flex_shrink: 0.0` below). The canvas takes the remainder.
 const SIDEBAR_WIDTH_PCT: f32 = 20.0;
 
-/// The currently selected story (`None` = nothing picked yet).
+/// The currently selected story (`None` = nothing picked yet). Read by
+/// [`crate::stage`] to swap the 3D stage's content to match.
 #[derive(Resource, Default)]
-struct CurrentStory(Option<StoryId>);
+pub(crate) struct CurrentStory(pub(crate) Option<StoryId>);
 
 /// Whether the sidebar is collapsed (canvas takes the full window).
 #[derive(Resource, Default)]
@@ -87,7 +90,21 @@ const TREE: &[Folder] = &[
             ("components", StoryId::Components, Icon::Component),
         ],
     ),
-    ("units", &[("guildmaster", StoryId::Guildmaster, Icon::User)]),
+    (
+        "units",
+        &[
+            // The nine arenas, in 3×3 grid order: class (arena).
+            ("hunter", StoryId::Hunter, Icon::Crosshair), // Labyrinth
+            ("guildmaster", StoryId::Guildmaster, Icon::Pyramid), // Guild House (home)
+            ("cardinal", StoryId::Cardinal, Icon::Donut), // Sanctum
+            ("forager", StoryId::Forager, Icon::Mountain), // Mountain
+            ("warrior", StoryId::Warrior, Icon::Hexagon), // Bastion
+            ("thief", StoryId::Thief, Icon::Triangle), // Pawnshop
+            ("alchemist", StoryId::Alchemist, Icon::FlaskConical), // Crucible
+            ("merchant", StoryId::Merchant, Icon::Gem), // Casino
+            ("bard", StoryId::Bard, Icon::Music), // Gala
+        ],
+    ),
 ];
 
 /// Tears down and rebuilds the entire UI for the active theme + selected story.
@@ -98,6 +115,8 @@ fn rebuild(
     active: Res<ActiveTheme>,
     current: Res<CurrentStory>,
     collapsed: Res<SidebarCollapsed>,
+    tier: Res<crate::hollow::Tier>,
+    layers: Res<crate::layers::LayerVisibility>,
     orbit: Query<&OrbitCamera>,
     roots: Query<Entity, With<UiRoot>>,
 ) {
@@ -122,7 +141,7 @@ fn rebuild(
     // Full-height sidebar on the left, spawned only when expanded — collapsing
     // leaves no rail behind.
     let sidebar = (!collapsed.0)
-        .then(|| build_sidebar(&mut commands, &assets, &theme, active.0, current.0));
+        .then(|| build_sidebar(&mut commands, &assets, &theme, active.0, current.0, *layers));
 
     // Right column: the navigation bar stacked above the canvas. It sits beside
     // the sidebar (not over it), so the nav starts at the sidebar's right edge.
@@ -143,7 +162,16 @@ fn rebuild(
         .0
         .filter(|s| s.has_3d_stage())
         .map(|_| orbit.iter().next().is_some_and(|c| c.unlocked));
-    let topnav = build_topnav(&mut commands, &assets, &theme, collapsed.0, orbit_unlocked);
+    // Live tier readout for 3D (boss) stories — reflects the `T`-key cycle.
+    let tier_label = current.0.filter(|s| s.has_3d_stage()).map(|_| tier.label());
+    let topnav = build_topnav(
+        &mut commands,
+        &assets,
+        &theme,
+        collapsed.0,
+        orbit_unlocked,
+        tier_label,
+    );
 
     // Scrollable canvas with an inner content column we render the story into.
     // `flex_grow` makes it fill the column below the nav; `min_height: 0` lets it
@@ -193,6 +221,7 @@ fn build_topnav(
     theme: &Theme,
     collapsed: bool,
     orbit_unlocked: Option<bool>,
+    tier_label: Option<&str>,
 ) -> Entity {
     let nav = commands
         .spawn((
@@ -218,7 +247,7 @@ fn build_topnav(
     let toggle = collapse_toggle(commands, assets, theme, glyph, collapse);
     commands.entity(nav).add_children(&[toggle]);
 
-    // 3D stories get an orbit (unlock camera) toggle pinned to the top-right.
+    // 3D stories get a tier readout + an orbit (unlock camera) toggle, top-right.
     if let Some(unlocked) = orbit_unlocked {
         let spacer = commands
             .spawn(Node {
@@ -226,8 +255,17 @@ fn build_topnav(
                 ..default()
             })
             .id();
-        let orbit = orbit_toggle(commands, assets, theme, unlocked);
-        commands.entity(nav).add_children(&[spacer, orbit]);
+        let mut items = vec![spacer];
+        if let Some(t) = tier_label {
+            items.push(label(
+                commands,
+                &format!("Tier: {t}  [T]"),
+                scale::font_size::F00,
+                theme.text_muted(),
+            ));
+        }
+        items.push(orbit_toggle(commands, assets, theme, unlocked));
+        commands.entity(nav).add_children(&items);
     }
     nav
 }
@@ -320,6 +358,7 @@ fn build_sidebar(
     theme: &Theme,
     active: ThemeId,
     current: Option<StoryId>,
+    layers: crate::layers::LayerVisibility,
 ) -> Entity {
     let sidebar = commands
         .spawn((
@@ -354,13 +393,29 @@ fn build_sidebar(
     let theme_title = label(commands, "Theme", scale::font_size::F00, theme.text_muted());
     commands.entity(header).add_children(&[palette, theme_title]);
 
-    // --- Theme switcher ---
-    let switcher = widgets::wrap(commands, scale::space::XS3);
-    let buttons: Vec<Entity> = ThemeId::ALL
+    // --- Theme switcher: two collapsible groups — Game (arena) vs Extra ---
+    let game_group = theme_group(commands, assets, theme, active, "Game", &ThemeId::GAME);
+    let extra_group = theme_group(commands, assets, theme, active, "Extra", &ThemeId::EXTRA);
+
+    // --- Layer visibility: a checkbox per 3D-stage layer (all on by default) ---
+    let layers_title = commands
+        .spawn((
+            Text::new("Layers"),
+            TextFont {
+                font_size: scale::font_size::F2,
+                ..default()
+            },
+            TextColor(theme.text_1()),
+            Node {
+                margin: UiRect::top(Val::Px(scale::space::XS)),
+                ..default()
+            },
+        ))
+        .id();
+    let layer_rows: Vec<Entity> = crate::layers::Layer::ALL
         .iter()
-        .map(|&id| theme_button(commands, theme, id, id == active))
+        .map(|&(layer, name)| layer_checkbox(commands, theme, layer, name, layers.get(layer)))
         .collect();
-    commands.entity(switcher).add_children(&buttons);
 
     // --- Stories header ---
     let stories_title = commands
@@ -381,7 +436,12 @@ fn build_sidebar(
     let chevron_down = Icon::ChevronDown.handle(assets);
     let chevron_right = Icon::ChevronRight.handle(assets);
 
-    let mut rows = vec![header, switcher, stories_title];
+    let mut rows = vec![header];
+    rows.extend(game_group);
+    rows.extend(extra_group);
+    rows.push(layers_title);
+    rows.extend(layer_rows);
+    rows.push(stories_title);
     for (folder, leaves) in TREE {
         let (header, chevron) = folder_header(commands, assets, theme, folder);
         let leaf_rows: Vec<Entity> = leaves
@@ -476,6 +536,115 @@ fn theme_button(commands: &mut Commands, theme: &Theme, id: ThemeId, selected: b
     button
 }
 
+/// A collapsible group of theme pills (e.g. "Game" vs "Extra"), styled like a
+/// story folder: a chevron/folder header that shows/hides a wrapped row of
+/// theme buttons. Returns `[header, container]` to splice into the sidebar.
+fn theme_group(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    theme: &Theme,
+    active: ThemeId,
+    name: &str,
+    ids: &[ThemeId],
+) -> [Entity; 2] {
+    let (header, chevron) = folder_header(commands, assets, theme, name);
+
+    let switcher = widgets::wrap(commands, scale::space::XS3);
+    let buttons: Vec<Entity> = ids
+        .iter()
+        .map(|&id| theme_button(commands, theme, id, id == active))
+        .collect();
+    commands.entity(switcher).add_children(&buttons);
+
+    let container = commands
+        .spawn(Node {
+            flex_direction: FlexDirection::Column,
+            ..default()
+        })
+        .id();
+    commands.entity(container).add_children(&[switcher]);
+
+    // Same open/closed toggle as the story folders.
+    let chevron_down = Icon::ChevronDown.handle(assets);
+    let chevron_right = Icon::ChevronRight.handle(assets);
+    commands.entity(header).observe(
+        move |_: On<Pointer<Click>>,
+              mut nodes: Query<&mut Node>,
+              mut images: Query<&mut ImageNode>| {
+            let collapsed = nodes
+                .get(container)
+                .map(|n| n.display == Display::None)
+                .unwrap_or(false);
+            if let Ok(mut node) = nodes.get_mut(container) {
+                node.display = if collapsed {
+                    Display::Flex
+                } else {
+                    Display::None
+                };
+            }
+            if let Ok(mut img) = images.get_mut(chevron) {
+                img.image = if collapsed {
+                    chevron_down.clone()
+                } else {
+                    chevron_right.clone()
+                };
+            }
+        },
+    );
+
+    [header, container]
+}
+
+/// A small checkbox row for a 3D-stage layer: a filled square when the layer is
+/// visible, empty when hidden, plus its label. Clicking toggles the layer (which
+/// re-renders the stage via the shared `LayerVisibility` resource).
+fn layer_checkbox(
+    commands: &mut Commands,
+    theme: &Theme,
+    layer: crate::layers::Layer,
+    name: &str,
+    checked: bool,
+) -> Entity {
+    let fill = if checked { theme.brand() } else { Color::NONE };
+    let square = commands
+        .spawn((
+            Node {
+                width: Val::Px(13.0),
+                height: Val::Px(13.0),
+                flex_shrink: 0.0,
+                border: UiRect::all(Val::Px(1.0)),
+                border_radius: BorderRadius::all(Val::Px(scale::radius::XS2)),
+                ..default()
+            },
+            BackgroundColor(fill),
+            BorderColor::all(theme.border_bold()),
+        ))
+        .id();
+    let text = label(commands, name, scale::font_size::F0, theme.text_2());
+    let row = commands
+        .spawn((
+            Button,
+            Node {
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(scale::space::XS3),
+                padding: UiRect::axes(Val::Px(scale::space::XS), Val::Px(3.0)),
+                border_radius: BorderRadius::all(Val::Px(scale::radius::XS2)),
+                ..default()
+            },
+            BackgroundColor(Color::NONE),
+        ))
+        .id();
+    commands.entity(row).add_children(&[square, text]);
+    make_interactive(commands, theme, row, Color::NONE);
+    commands.entity(row).observe(
+        move |_: On<Pointer<Click>>, mut vis: ResMut<crate::layers::LayerVisibility>| {
+            vis.toggle(layer);
+        },
+    );
+    row
+}
+
 fn folder_header(
     commands: &mut Commands,
     assets: &AssetServer,
@@ -549,9 +718,24 @@ fn leaf_row(
     make_interactive(commands, theme, row, base);
     commands
         .entity(row)
-        .observe(move |_: On<Pointer<Click>>, mut current: ResMut<CurrentStory>| {
-            current.0 = Some(story);
-        });
+        .observe(
+            move |_: On<Pointer<Click>>,
+                  mut current: ResMut<CurrentStory>,
+                  mut active: ResMut<ActiveTheme>| {
+                // Guard so re-clicking the active leaf doesn't re-fire the change
+                // and needlessly despawn/reload the 3D content (a glTF reload flash).
+                if current.0 != Some(story) {
+                    current.0 = Some(story);
+                }
+                // Each arena opens in its matched theme, so the boss reads
+                // on-theme. Non-arena stories leave the theme as-is.
+                if let Some(t) = story.arena_theme()
+                    && active.0 != t
+                {
+                    active.0 = t;
+                }
+            },
+        );
     row
 }
 

@@ -27,6 +27,16 @@ const ICONS: &[&str] = &[
     "layers",
     "component",
     "user",
+    "pyramid",
+    "crosshair",
+    "flask-conical",
+    "donut",
+    "hexagon",
+    "triangle",
+    "music",
+    "mountain",
+    "gem",
+    "sparkles",
     "rotate-3d",
 ];
 
