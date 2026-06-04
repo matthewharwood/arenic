@@ -67,7 +67,13 @@ pub fn subheading(commands: &mut Commands, theme: &Theme, s: &str) -> Entity {
 }
 
 /// A colour swatch: a rounded chip of `color` with a name + value caption.
-pub fn swatch(commands: &mut Commands, theme: &Theme, color: Color, name: &str, value: &str) -> Entity {
+pub fn swatch(
+    commands: &mut Commands,
+    theme: &Theme,
+    color: Color,
+    name: &str,
+    value: &str,
+) -> Entity {
     let col = column(commands, scale::space::XS3);
 
     let chip = commands

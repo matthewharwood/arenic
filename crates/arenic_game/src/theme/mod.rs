@@ -206,21 +206,68 @@ pub enum ThemeId {
     Dracula,
     Catppuccin,
     Luxury,
+    // Arena-matched themes (ARE-17): each is bound to one of the nine arenas.
+    TokyoNight,
+    Abyss,
+    GruvboxDark,
+    AyuDark,
+    Coffee,
+    RosePine,
+    Gala,
 }
 
 impl ThemeId {
-    /// Every theme, in display order.
-    pub const ALL: [ThemeId; 9] = [
+    /// The nine themes bound to an arena — each arena renders in one of these.
+    /// Ordered by arena index (Labyrinth … Gala). Each class's theme travels with
+    /// the class to its arena (see the rulebook's 3×3 grid).
+    pub const GAME: [ThemeId; 9] = [
+        ThemeId::TokyoNight,  // 0 Labyrinth   — Hunter
+        ThemeId::Coffee,      // 1 Guild House — Guildmaster (warm hearth / home)
+        ThemeId::Luxury,      // 2 Sanctum     — Cardinal
+        ThemeId::Forest,      // 3 Mountain    — Forager (green, nature/foraging)
+        ThemeId::GruvboxDark, // 4 Bastion     — Warrior (forge fortress)
+        ThemeId::AyuDark,     // 5 Pawnshop    — Thief
+        ThemeId::Abyss,       // 6 Crucible    — Alchemist (the vessel)
+        ThemeId::RosePine,    // 7 Casino      — Merchant
+        ThemeId::Synthwave,   // 8 Gala        — Bard (the festival)
+    ];
+
+    /// Catalogue themes not bound to an arena. Kept available, never deleted —
+    /// includes the retired bespoke `Gala` neon (Gala is the Bard's arena now).
+    pub const EXTRA: [ThemeId; 7] = [
         ThemeId::Light,
         ThemeId::Dark,
-        ThemeId::Synthwave,
         ThemeId::Cyberpunk,
-        ThemeId::Forest,
         ThemeId::Lofi,
         ThemeId::Dracula,
         ThemeId::Catppuccin,
-        ThemeId::Luxury,
+        ThemeId::Gala,
     ];
+
+    /// Every theme, in display order: the nine arena themes, then the extras.
+    pub const ALL: [ThemeId; 16] = [
+        ThemeId::TokyoNight,
+        ThemeId::Coffee,
+        ThemeId::Luxury,
+        ThemeId::Forest,
+        ThemeId::GruvboxDark,
+        ThemeId::AyuDark,
+        ThemeId::Abyss,
+        ThemeId::RosePine,
+        ThemeId::Synthwave,
+        ThemeId::Light,
+        ThemeId::Dark,
+        ThemeId::Cyberpunk,
+        ThemeId::Lofi,
+        ThemeId::Dracula,
+        ThemeId::Catppuccin,
+        ThemeId::Gala,
+    ];
+
+    /// Whether this theme is bound to an arena (in [`ThemeId::GAME`]).
+    pub fn is_game(self) -> bool {
+        Self::GAME.contains(&self)
+    }
 
     /// Human-readable name, e.g. for a theme switcher.
     pub fn label(self) -> &'static str {
@@ -234,6 +281,13 @@ impl ThemeId {
             ThemeId::Dracula => "Dracula",
             ThemeId::Catppuccin => "Catppuccin",
             ThemeId::Luxury => "Luxury",
+            ThemeId::TokyoNight => "Tokyo Night",
+            ThemeId::Abyss => "Abyss",
+            ThemeId::GruvboxDark => "Gruvbox Dark",
+            ThemeId::AyuDark => "Ayu Dark",
+            ThemeId::Coffee => "Coffee",
+            ThemeId::RosePine => "Rosé Pine",
+            ThemeId::Gala => "Gala",
         }
     }
 
@@ -249,6 +303,13 @@ impl ThemeId {
             ThemeId::Dracula => palettes::DRACULA,
             ThemeId::Catppuccin => palettes::CATPPUCCIN,
             ThemeId::Luxury => palettes::LUXURY,
+            ThemeId::TokyoNight => palettes::TOKYO_NIGHT,
+            ThemeId::Abyss => palettes::ABYSS,
+            ThemeId::GruvboxDark => palettes::GRUVBOX_DARK,
+            ThemeId::AyuDark => palettes::AYU_DARK,
+            ThemeId::Coffee => palettes::COFFEE,
+            ThemeId::RosePine => palettes::ROSE_PINE,
+            ThemeId::Gala => palettes::GALA,
         }
     }
 

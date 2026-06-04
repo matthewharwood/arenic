@@ -12,6 +12,7 @@
 //! never the reverse. So anything a binary needs to share lives here and is
 //! `pub`, rather than being duplicated.
 
+pub mod boss;
 pub mod default_font;
 pub mod guildmaster;
 pub mod icon;
