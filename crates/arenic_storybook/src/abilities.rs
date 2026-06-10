@@ -3,7 +3,7 @@
 //! VFX itself is a reusable `arenic_game::ability` piece; the scene (player puck +
 //! target boss) is staged by [`crate::stage`].
 
-use arenic_game::ability::{AbilityPlugin, AbilitySfx, holy_nova, play_sfx};
+use arenic_game::ability::{AbilityMeshes, AbilityPlugin, AbilitySfx, holy_nova, play_sfx};
 use arenic_game::theme::ActiveTheme;
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::prelude::*;
@@ -34,7 +34,7 @@ impl Plugin for AbilitiesPlugin {
 fn fire_holy_nova(
     mut commands: Commands,
     players: Query<Entity, With<Player>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     active: Res<ActiveTheme>,
     sfx: Res<AbilitySfx>,
@@ -43,7 +43,7 @@ fn fire_holy_nova(
     let color = active.palette().warning;
     let mut fired = false;
     for player in &players {
-        let burst = holy_nova(&mut meshes, &mut materials, color);
+        let burst = holy_nova(meshes.sphere.clone(), &mut materials, color);
         // Spawn as a child of the puck so it bursts from the player.
         commands.spawn((burst, ChildOf(player)));
         fired = true;

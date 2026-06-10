@@ -13,18 +13,20 @@
 //! but stays centred on the overworld when zoomed out (only the selection border
 //! moves). The Guild House has **two guildmaster pucks**: `Tab` selects between them
 //! (a glowing ring marks the selected one), arrow keys step the selected puck one
-//! tile/press, `1` casts Holy Nova from it, `L` lavas its tile (a demo of the
+//! tile/press — stepping past an arena edge **edge-walks** into the adjacent arena
+//! — `1` casts Holy Nova from it, `R` records its staff (see `crate::recording` +
+//! RULEBOOK → Record & Replay), `L` lavas its tile (a demo of the
 //! [`arenic_game::tile::TileBoard`] API). `Esc` → title.
 
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_8};
 
-use arenic_game::ability::{AbilityPlugin, AbilitySfx, holy_nova, play_sfx};
+use arenic_game::ability::{AbilityMeshes, AbilityPlugin, AbilitySfx, cast_holy_nova};
 use arenic_game::arena::{Arena, PropSpec};
 use arenic_game::atmosphere::{AtmospherePlugin, CloudFog, Plane, cloud_material};
 use arenic_game::boss::{BossSpec, LightBehavior, boss_a, light_offset};
 use arenic_game::grid::{
-    ARENA_H, ARENA_W, ARENAS, GRID_H, GRID_W, TILE, TileMover, arena_offset, arrow_delta,
-    arrow_pressed, board_center, tile_to_world,
+    ARENA_H, ARENA_W, ARENAS, GRID_H, GRID_W, TILE, TileMover, arena_offset, board_center,
+    tile_to_world,
 };
 use arenic_game::guildmaster::guildmaster;
 use arenic_game::swarm::{
@@ -33,6 +35,9 @@ use arenic_game::swarm::{
 };
 use arenic_game::theme::Theme;
 use arenic_game::tile::{ArenaTiles, Tile, TileBoard, TileKind, build_tile_materials};
+use arenic_game::timeline::{
+    Action, ArenaClock, ArenaTimeline, Ghost, RecordingLibrary, TimelineEvent,
+};
 use bevy::color::Alpha;
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::light::{NotShadowCaster, NotShadowReceiver, ShadowFilteringMethod};
@@ -41,6 +46,10 @@ use bevy::prelude::*;
 use bevy::render::view::Hdr;
 
 use crate::hud::{BOTTOM_BAR_PX, TOP_BAR_PX};
+use crate::modal::no_modal;
+use crate::recording::{
+    DraftTimeline, RecordingState, is_idle, no_pending_walk, not_counting_down,
+};
 use crate::states::AppState;
 
 /// The Guild House — arena index 1 (top row, middle column); home of the puck.
@@ -83,9 +92,10 @@ pub(crate) struct ZoomOut;
 struct Puck(usize);
 
 /// Marks the currently-selected puck: it moves with the arrows, casts abilities, and
-/// wears the selection ring. Exactly one puck has this at a time.
+/// wears the selection ring. Exactly one puck has this at a time — recording
+/// systems query it dynamically (RULEBOOK → Selected Character Query Pattern).
 #[derive(Component)]
-struct Selected;
+pub(crate) struct Selected;
 
 /// The glowing selection halo; [`follow_selected`] parks it on the selected puck.
 #[derive(Component)]
@@ -114,23 +124,49 @@ impl Plugin for IntroScenePlugin {
             .add_systems(
                 Update,
                 (
+                    // World input gates off while a modal is open, a recording
+                    // countdown holds the arena (RULEBOOK → Modal Controls), or
+                    // a confirmed edge-walk is one frame from landing.
                     fire_holy_nova.run_if(
                         input_just_pressed(KeyCode::Digit1)
-                            .or(input_just_pressed(KeyCode::Numpad1)),
+                            .or(input_just_pressed(KeyCode::Numpad1))
+                            .and(no_modal)
+                            .and(not_counting_down)
+                            .and(no_pending_walk),
                     ),
                     toggle_zoom.run_if(input_just_pressed(KeyCode::KeyP)),
                     paginate.run_if(
                         input_just_pressed(KeyCode::BracketLeft)
                             .or(input_just_pressed(KeyCode::BracketRight)),
                     ),
-                    kindle.run_if(input_just_pressed(KeyCode::KeyL)),
-                    cycle_selection.run_if(input_just_pressed(KeyCode::Tab)),
-                    move_selected.run_if(arrow_pressed),
+                    refocus_camera.run_if(resource_changed::<CurrentArena>),
+                    // L mutates the board, which restart() can't rewind — idle only,
+                    // so a committed staff never replays against unrecorded state.
+                    kindle.run_if(
+                        input_just_pressed(KeyCode::KeyL)
+                            .and(no_modal)
+                            .and(is_idle)
+                            .and(no_pending_walk),
+                    ),
+                    // Tab is ignored while recording — the staff belongs to whoever
+                    // started it (RULEBOOK → Recording Interruptions) — and while a
+                    // pending walk could otherwise retarget Selected mid-handoff.
+                    cycle_selection.run_if(
+                        input_just_pressed(KeyCode::Tab)
+                            .and(no_modal)
+                            .and(is_idle)
+                            .and(no_pending_walk),
+                    ),
+                    // Arrow movement + edge-walking live in `crate::travel`.
                     follow_selected,
                     animate_swarm,
                     animate_boss_cores,
                     draw_overworld_gizmos.run_if(any_with_component::<ZoomOut>),
-                    back_to_title.run_if(input_just_pressed(KeyCode::Escape)),
+                    back_to_title.run_if(
+                        input_just_pressed(KeyCode::Escape)
+                            .and(no_modal)
+                            .and(is_idle),
+                    ),
                 )
                     .run_if(in_state(AppState::Intro)),
             );
@@ -224,6 +260,11 @@ fn setup_intro(
         let offset = arena_offset(index);
         let arena = commands
             .spawn((
+                // The arena root carries its identity, its 2-minute clock, and
+                // the master timeline its ghosts replay (RULEBOOK → sheet music).
+                arena_id,
+                ArenaClock::default(),
+                ArenaTimeline::default(),
                 Transform::from_xyz(offset.x, offset.y, 0.0),
                 Visibility::default(),
                 ChildOf(battleground),
@@ -331,6 +372,7 @@ fn setup_intro(
                     guildmaster(&assets),
                     Puck(i),
                     TileMover::new(col, row),
+                    RecordingLibrary::default(),
                     Transform::from_xyz(p.x, p.y, 0.05)
                         .with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
                     ChildOf(arena),
@@ -509,50 +551,69 @@ fn animate_boss_cores(
 /// Demo of the tile-state API: `L` turns the tile under the puck to lava (move with
 /// the arrows first). Your game logic flips tiles the same way: `board.set(arena,
 /// col, row, TileKind::Lava)`.
-fn kindle(puck: Single<&TileMover, With<Selected>>, mut board: TileBoard) {
+fn kindle(
+    puck: Single<(&TileMover, &ChildOf), With<Selected>>,
+    arenas: Query<&Arena>,
+    mut board: TileBoard,
+) -> Result {
+    let (mover, child_of) = *puck;
+    let arena = arenas.get(child_of.parent())?;
     board.set(
-        GUILD_HOUSE,
-        puck.col as usize,
-        puck.row as usize,
+        arena.index(),
+        mover.col as usize,
+        mover.row as usize,
         TileKind::Lava,
     );
+    Ok(())
 }
 
-/// `Tab` moves the selection to the next guildmaster puck (cyclic, by [`Puck`] index).
+/// `Tab` moves the selection to the next guildmaster puck (cyclic, by [`Puck`]
+/// index). Focus follows selection: [`CurrentArena`] jumps to the new puck's
+/// arena (the zoomed-in camera + HUD re-theme), and the ring catches up via
+/// [`follow_selected`] — the same mechanism an edge-walk uses.
 fn cycle_selection(
     mut commands: Commands,
     selected: Single<(Entity, &Puck), With<Selected>>,
-    pucks: Query<(Entity, &Puck)>,
-) {
-    let (current, here) = *selected;
+    pucks: Query<(Entity, &Puck, &ChildOf)>,
+    arenas: Query<&Arena>,
+    mut current: ResMut<CurrentArena>,
+) -> Result {
+    let (current_puck, here) = *selected;
     let count = pucks.iter().count();
     debug_assert!(count > 0, "invariant: the Selected puck is in `pucks`");
     let next = here.0.strict_add(1) % count;
-    if let Some((entity, _)) = pucks.iter().find(|(_, p)| p.0 == next) {
-        commands.entity(current).remove::<Selected>();
+    if let Some((entity, _, child_of)) = pucks.iter().find(|(_, p, _)| p.0 == next) {
+        commands.entity(current_puck).remove::<Selected>();
         commands.entity(entity).insert(Selected);
+        current.0 = arenas.get(child_of.parent())?.index();
     }
+    Ok(())
 }
 
-/// Moves the SELECTED puck one tile per arrow-key press (clamped to the grid). Only
-/// the selected puck responds — the others hold position (this replaces the shared
-/// `grid::step_movers`, which would move every puck at once).
-fn move_selected(
-    keys: Res<ButtonInput<KeyCode>>,
-    selected: Single<(&mut TileMover, &mut Transform), With<Selected>>,
-) {
-    let (mut mover, mut transform) = selected.into_inner();
-    mover.step(&mut transform, arrow_delta(&keys));
-}
-
-/// Parks the selection ring on the selected puck (its local X/Y), so the halo tracks
-/// both `Tab` and arrow-key movement. The ring keeps its own Z.
+/// Parks the selection ring on the selected puck (its local X/Y), so the halo
+/// tracks `Tab`, arrow-key movement, AND arena changes: if the puck lives in a
+/// different arena than the ring (Tab across arenas, or an edge-walk), the ring
+/// re-parents first so the local copy lands in the right space. The ring keeps
+/// its own Z.
 fn follow_selected(
-    puck: Single<&Transform, (With<Selected>, Without<SelectionRing>)>,
-    mut ring: Single<&mut Transform, With<SelectionRing>>,
+    mut commands: Commands,
+    puck: Single<(&Transform, &ChildOf), (With<Selected>, Without<SelectionRing>)>,
+    ring: Single<(Entity, &mut Transform, &ChildOf), With<SelectionRing>>,
 ) {
-    ring.translation.x = puck.translation.x;
-    ring.translation.y = puck.translation.y;
+    let (puck_transform, puck_parent) = *puck;
+    let (entity, mut transform, ring_parent) = ring.into_inner();
+    if ring_parent.parent() != puck_parent.parent() {
+        commands
+            .entity(entity)
+            .insert(ChildOf(puck_parent.parent()));
+    }
+    // Write-if-changed: an unconditional write would re-dirty the ring's
+    // Transform (and its propagation) every frame the puck stands still.
+    let target = puck_transform.translation.truncate();
+    if transform.translation.truncate() != target {
+        transform.translation.x = target.x;
+        transform.translation.y = target.y;
+    }
 }
 
 /// `P` toggles the camera between the overworld (all 9 arenas) and a zoom on the
@@ -572,26 +633,26 @@ fn toggle_zoom(
     }
 }
 
-/// `[` / `]` select the previous / next arena (cyclic). Zoomed in, the camera
-/// follows to the new arena; zoomed out, it stays centred on the overworld and only
-/// the selection border (see [`draw_overworld_gizmos`]) moves.
-fn paginate(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut current: ResMut<CurrentArena>,
-    camera: Single<(&mut Transform, Has<ZoomOut>), With<Camera3d>>,
-) {
-    let dir = keys.just_pressed(KeyCode::BracketRight) as i32
-        - keys.just_pressed(KeyCode::BracketLeft) as i32;
+/// `[` / `]` select the previous / next arena (cyclic). [`refocus_camera`] follows
+/// when zoomed in; zoomed out, only the selection border
+/// (see [`draw_overworld_gizmos`]) moves.
+fn paginate(keys: Res<ButtonInput<KeyCode>>, mut current: ResMut<CurrentArena>) {
+    let dir = (keys.just_pressed(KeyCode::BracketRight) as i32)
+        .strict_sub(keys.just_pressed(KeyCode::BracketLeft) as i32);
     if dir == 0 {
         return;
     }
     current.0 = (current.0 as i32).strict_add(dir).rem_euclid(ARENAS as i32) as usize;
-    let (mut transform, zoomed_out) = camera.into_inner();
-    if !zoomed_out {
-        // Zoomed in: follow the camera to the newly-selected arena.
-        *transform = camera_pose(current.0, ZOOM_IN);
-    }
-    // Zoomed out: the camera stays centred; the gizmo border follows `current`.
+}
+
+/// Re-poses the zoomed-in camera whenever [`CurrentArena`] changes (pagination or
+/// an edge-walk). Zoomed out ([`ZoomOut`] present) the `Single` filter finds no
+/// camera and the system is skipped — the overworld stays centred.
+fn refocus_camera(
+    current: Res<CurrentArena>,
+    mut camera: Single<&mut Transform, (With<Camera3d>, Without<ZoomOut>)>,
+) {
+    **camera = camera_pose(current.0, ZOOM_IN);
 }
 
 /// When zoomed out, draws the column dividers + a border around the current arena.
@@ -621,20 +682,34 @@ fn draw_overworld_gizmos(mut gizmos: Gizmos, current: Res<CurrentArena>) {
 }
 
 /// `1` (or numpad `1`) casts Holy Nova from the puck: the burst VFX + its sound.
+/// A selected ghost never casts live — its recorded casts play back instead.
+/// While recording, the cast lands in the draft HERE, atomically with the live
+/// effect (like movement in `travel::move_selected`), so the committed staff and
+/// the rehearsed take can never disagree about a cast.
 fn fire_holy_nova(
     mut commands: Commands,
-    player: Single<Entity, With<Selected>>,
-    mut meshes: ResMut<Assets<Mesh>>,
+    state: Res<RecordingState>,
+    mut draft: ResMut<DraftTimeline>,
+    player: Single<(Entity, &ChildOf), (With<Selected>, Without<Ghost>)>,
+    clocks: Query<&ArenaClock>,
+    meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     sfx: Res<AbilitySfx>,
-) {
-    let color = Color::srgb(1.0, 0.9, 0.55); // holy gold
-    let burst = holy_nova(&mut meshes, &mut materials, color);
-    commands.spawn((burst, ChildOf(*player)));
-    play_sfx(&mut commands, sfx.holy_nova.clone());
+) -> Result {
+    let (player, child_of) = *player;
+    cast_holy_nova(&mut commands, &meshes, &mut materials, &sfx, player);
+    if matches!(*state, RecordingState::Recording) {
+        let tick = clocks.get(child_of.parent())?.tick;
+        draft.events.push(TimelineEvent {
+            tick,
+            action: Action::Ability(1),
+        });
+    }
+    Ok(())
 }
 
-/// `Esc` returns to the title (the 3D scene has no UI yet — this is the way out).
+/// `Esc` returns to the title — only while idle with no modal open (inside a
+/// modal, Esc is the cancel key; mid-recording it would destroy the draft).
 fn back_to_title(mut next: ResMut<NextState<AppState>>) {
     next.set(AppState::Title);
 }

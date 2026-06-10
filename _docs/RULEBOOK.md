@@ -23,16 +23,16 @@ Build a guild powerful enough to simultaneously manage 8 different arenas, each 
 ## Getting Started
 
 ### Your First Steps
-1. **Arena Selection**: Begin in Arena 1 with your starting hero
-2. **Movement**: Use WASD keys to move your hero one tile at a time on the grid
+1. **Arena Selection**: Begin in the Guild House (arena 1) with your starting hero
+2. **Movement**: Use the arrow keys to move your hero one tile at a time on the grid
 3. **Character Selection**: Press Tab to switch between available heroes in your current arena
-4. **Basic Combat**: Your hero will automatically attack nearby enemies based on their abilities
+4. **Basic Combat**: In combat arenas, your hero automatically attacks nearby enemies based on their abilities (the Guild House is a safe hearth with none)
 
 ### Understanding the Interface
 - **Grid-Based Movement**: Each arena is a 66×31 tile battlefield
 - **Multi-Arena View**: Access all 9 arenas through the navigation system
-- **Character Status**: Active characters are highlighted with blue materials
-- **Boss Visibility**: Enemy bosses appear as large red spheres in each arena
+- **Character Status**: The selected hero carries a glowing selection ring; ghosts carry a blue ring
+- **Boss Visibility**: Each combat arena holds one large themed relic boss with a glowing core (see Arena-Specific Boss Types); the Guild House has none
 
 ---
 
@@ -40,17 +40,30 @@ Build a guild powerful enough to simultaneously manage 8 different arenas, each 
 
 | Input | Action |
 |-------|--------|
-| **WASD** | Move active character (tile-by-tile grid movement) |
+| **Arrow Keys** | Move selected character (tile-by-tile grid movement) |
 | **Tab** | Switch to next character in current arena |
 | **Shift+Tab** | Switch to previous character in current arena |
 | **1-4** | Activate character abilities (when available) |
-| **R** | Start recording (character) / Show replay dialog (ghost with recording in arena) |
-| **F** | Finalize and commit the current recording |
+| **R** | Record key (context-sensitive): start the 3s countdown, or open a modal — *Record new / Replay previous / Cancel* (prior recording), *Record new / Cancel* (selected ghost), *Commit partial / Keep recording / Discard* (while recording) |
+| **[ / ]** | Cycle through arenas (0-8, wraps around) |
+| **P** | Toggle between single-arena view and all-arenas overview |
+| **Esc** | Cancel an open modal / return to the title screen |
 | **Enter** | Open guild house management menu |
-| **Q/E** | Rotate between different arena faces |
-| **W** | Zoom between arena view and overworld map |
-| **Mouse** | Arena selection and UI interaction |
-| **Space** | Interact with objects, chests, or confirm dialogues |
+| **Mouse** | Arena selection and UI interaction (optional — every modal is fully keyboard-driven) |
+| **Space** | Interact with objects and chests |
+
+### Modal Controls (keyboard-first)
+
+Every recording decision is a TUI-style modal driven entirely from the keyboard —
+think terminal permission prompts or Caves of Qud's dialogs. Mouse clicks work,
+but are never required:
+
+- Options lay out **horizontally** with numbered hotkeys — press **1-9** to choose one instantly
+- **← / →** (or **Tab / Shift+Tab**) move the focus highlight between options
+- **Enter** confirms the focused option; **Esc** always takes the safe/cancel option
+- A hint line on the modal spells out exactly these keys (`←→ focus · Enter confirm · Esc cancel`)
+- While a modal is open, world input (movement, abilities, R, Tab) is gated off — the
+  number and arrow keys belong to the modal — and only that arena's clock pauses
 
 ---
 
@@ -60,7 +73,7 @@ Build a guild powerful enough to simultaneously manage 8 different arenas, each 
 
 Arenic uses a **single keypress** input system - every action requires exactly one key press:
 
-- **Movement**: Each WASD press moves your character exactly one tile
+- **Movement**: Each arrow-key press moves your character exactly one tile
 - **Abilities**: Each number key (1-4) press activates the ability once
 - **No Held Keys**: Holding down movement keys does NOT create continuous movement
 - **Intent-Based**: The recording system captures when you pressed a key, not how long you held it
@@ -73,97 +86,110 @@ Arenic uses a **single keypress** input system - every action requires exactly o
 - Recordings are highly compressed and efficient
 
 **Example:**
-- ❌ **Wrong**: Hold W to move multiple tiles → Only moves one tile on initial press
-- ✅ **Correct**: Press W, W, W, W to move four tiles → Each press moves one tile
+- ❌ **Wrong**: Hold ↑ to move multiple tiles → Only moves one tile on initial press
+- ✅ **Correct**: Press ↑, ↑, ↑, ↑ to move four tiles → Each press moves one tile
 
 ---
 
 ## The Record & Replay System (Core Mechanic)
 
-The recording system allows you to capture 2-minute sequences of character actions that replay as autonomous "ghosts" every arena cycle. This core mechanic enables you to build up complex, coordinated strategies across multiple characters and arenas.
+The recording system allows you to capture 2-minute sequences of character actions that replay as autonomous "ghosts" every arena cycle. Think of it as sheet music: every arena cycle is a fixed 2-minute score, and each character owns a per-arena **staff** — a stream of intent events (moves and abilities). Committing a recording **folds** that staff into the arena's single **master timeline**, which choreographs all of the arena's ghosts (up to 40) at once.
 
 ### How Recording Works
 
 **Starting a Recording**
-- Press R while controlling any non-ghost character to begin recording
-- If pressed on a ghost that has a recording in current arena, shows replay dialog instead
-- A 3-second countdown prepares you before capture starts
-- The arena timer resets to 0:00 when recording begins
-- All your movements (WASD) and abilities (1-4 keys) are captured as intent
+- Press R while controlling the selected character; only one recording can be in progress at a time
+- No prior recording for this arena → the 3-second countdown starts immediately (no modal)
+- A prior recording exists for this arena → a modal asks **Record new** / **Replay previous** / **Cancel**
+- R on a selected ghost → a modal asks **Record new** / **Cancel** (recording anew unfolds the ghost's old events first)
+- During the countdown the recording arena is held at 0:00 — the other arenas keep playing
+- All input is ignored during the countdown — except **R**, which aborts it; movement and abilities register only once capture begins at 0:00
+- Capture runs as the clock ticks 0:00 → 2:00; all movements (arrow keys) and abilities (1-4 keys) are captured as intent, stamped with the arena's current tick
 
 **During Recording**
 - You have exactly 120 seconds to record your strategy
-- A red "RECORDING" indicator shows your current state
-- The timeline progress bar shows how much time remains
+- A red "REC" indicator and the arena clock show in the HUD while recording
+- Movement stays live inside the arena; stepping past an edge that has an adjacent arena opens the **Like the recording?** modal instead of silently moving you (at the outer world border the step simply clamps, recorded as played)
+- Tab is ignored while recording; the recording always belongs to the character who started it
 - Recording captures your input intent, not character position - ensuring perfect replay regardless of physics changes
 
 **Ending a Recording**
-- Recording automatically stops at the 2-minute mark
-- Press R again to manually interrupt recording early
-- A confirmation dialog appears with options:
-    - **Continue**: Return to active recording (keep recording)
-    - **Cancel**: Stop recording and discard progress
+- At the 2-minute mark the clock pauses and a modal asks **Commit** / **Discard**
+- Press R mid-recording to stop early: a modal asks **Commit partial** / **Keep recording** / **Discard**
+- A partial commit is simply a shorter event list — the ghost replays it, then idles for the rest of each cycle
+- On commit: the draft is cached in the character's per-arena library, folded into the arena's master timeline, the character becomes a ghost, and the arena restarts at 0:00
+- On discard: the draft is thrown away and the character stays selected
 
 **Recording Interruptions**
-- **Arena Switching**: Using [ ] or P (zoom) keys immediately stops recording with no confirmation
-- **Character Switching**: Pressing Tab shows confirmation dialog first:
-    - **Switch Character**: Stop recording and switch to next character
-    - **Continue Recording**: Cancel switch and return to recording
+- Tab is ignored while recording — a recording cannot be switched away from
+- Stepping past the arena edge opens the **Like the recording?** modal: **Continue recording** (abort the step) / **Cancel recording & walk out** (discard the draft, then perform the step) / **Commit** (fold the draft — you become a ghost and stay)
+- Camera keys ([ / ] and P) never stop a recording — watching another arena is safe
+- While any modal is open, only the recording arena's clock pauses
 
 ### Ghost Playback System
 
 **Autonomous Replay**
-- Ghosts automatically replay their recorded timeline every 2-minute arena cycle
-- Each arena maintains its own independent timer (0:00 to 2:00)
-- Ghosts in off-screen arenas continue advancing their timelines
-- When the timer loops back to 0:00, ghosts seamlessly restart
+- Each arena owns a single **master timeline**: every committed recording is cloned, tagged with its ghost, and folded into one tick-sorted event stream
+- Ghosts don't replay individual timelines — the arena plays its master timeline and drives all of its ghosts (up to 40) from it
+- Each arena maintains its own independent clock (0:00 to 2:00)
+- Ghosts in off-screen arenas continue advancing — their arenas never stop ticking
+- Whenever an arena (re)starts at 0:00 — natural clock wrap, recording start, commit, or replaying a stored recording — every folded ghost snaps to its recorded start tile and the score replays (breaking a ghost out does **not** restart the arena)
 
 **Visual Indicators**
-- Ghosts appear with blue tint and transparency effects
-- Ghost trails show recent movement paths
-- Character indicators above heads show state (green=active, red=recording, blue=ghost)
-- Cannot directly control ghosts - they follow their recorded timeline
+- Ghosts carry a blue ring; the selected character carries the white selection ring
+- A red "REC" label and the arena clock show in the HUD while recording; a countdown digit shows during the 3-second countdown
+- Cannot directly control ghosts - they follow the arena's master timeline (Tab can re-select one; press R on it to record anew, or an arrow key to break it out)
+
+**Breaking a Ghost Out**
+- Arrow keys never move a ghost directly — pressing one with a ghost selected opens the **Break out?** modal (pausing only that arena):
+    - **Take control**: the ghost's events are unfolded from the master timeline, the Ghost state is removed, and the arena **resumes right where it left off** (no restart) — the character stays at its current position under free control
+    - **Restart arena**: the arena restarts at 0:00 and every ghost snaps to its start — the character stays a folded ghost
+    - **Cancel**: nothing changes; playback resumes
+- A broken-out character keeps its cached recording: press **R** for *Record new / Replay previous / Cancel* — *Replay previous* folds it back in and restarts the arena
 
 **Timeline Accuracy**
-- Recording stores movement intent (WASD keys) not positions
-- Abilities trigger at exact recorded timestamps
-- Death events are captured and replayed
+- Recording stores movement intent (arrow-key presses) not positions — transforms are derived on playback
+- Events are stamped in ticks on the fixed 60 Hz timestep (7,200 ticks per 2-minute cycle), never in seconds
+- Each recording remembers its start tile, so every cycle replays from the same origin
+- Abilities trigger at exact recorded ticks
 - Perfect deterministic replay every cycle
 
 ### Multi-Arena Coordination
 
 **Independent Timers**
-- Each of the 9 arenas has its own 2-minute cycle timer
+- Each of the 9 arenas has its own 2-minute cycle clock
 - Ghosts use their parent arena's clock for playback
-- Switching arenas ([ ]) doesn't affect other arena timers
-- All timelines pause during dialog choices
+- Switching arenas ([ ]) doesn't affect other arena clocks
+- While a modal is open, **only the selected arena's clock pauses** — the other eight keep ticking
+- During a recording countdown, only the recording arena is held at 0:00
 
 **Cross-Arena Strategy**
 - Record complementary ghosts across multiple arenas
 - Use the arena status panel to track ghost counts per arena
 - Maximum of 40 ghosts per arena, 320 total across all arenas
-- Performance automatically adjusts update rates for distant arenas
+- (Future) rendering may scale down visual update rates for distant arenas; the simulation always ticks every arena at the fixed 60 Hz timestep
 
 ### Ghost Replay Feature
 
 **Arena-Specific Recordings**
-- Each character can store separate recordings for each of the 9 arenas
-- Recordings are stored in a per-character hashmap with arena as the key
-- Characters effectively become "multiple ghosts" - one per arena recorded in
+- Each character keeps a per-arena library of recordings (a hashmap keyed by arena) — its "staff" of sheet music per arena
+- A character is only ever a ghost in the arena it currently occupies; its other recordings wait in the library
+- Re-committing a recording for an arena replaces the old one (unfold first, then fold — always idempotent)
 
-**Returning to Previous Arenas**
-- When a ghost returns to an arena where they have a previous recording, a dialog appears
-- Options presented:
-    - **Replay Previous**: Use the stored recording for this arena
-    - **Draft New**: Convert ghost back to character for new recording
-    - **Cancel**: Continue without replaying
+**Travel: Leaving and Returning**
+- Travel is edge-walking: stepping past an arena edge re-parents the hero into the adjacent arena at the opposite edge
+- Edge-walking only applies between adjacent arenas — at the outer border of the 3×3 grid movement is clamped (the world does not wrap)
+- Ghosts never edge-walk: break the ghost out first (see **Breaking a Ghost Out**) — its events leave the master timeline at break-out and that arena keeps playing without restarting — then walk it wherever you like
+- When a hero edge-walks **into** an arena where it has a cached recording, a modal asks:
+    - **Replay previous**: fold the stored recording back into this arena's master timeline — the hero becomes a ghost and the arena restarts
+    - **Continue without**: stay a regular character (press R later to record new or replay via the R modal)
 - This allows the same character to have different tactical roles in different arenas
 
 **Strategic Applications**
 - Create arena-specific strategies with the same character
 - Build up recordings progressively as you learn each arena
 - Reuse successful recordings when returning to farm or practice
-- Maintain separate recordings for Normal/Heroic/Mythic difficulties
+- (Future) maintain separate recordings per difficulty tier — today the library is keyed by arena only
 
 ### Recording Best Practices
 
@@ -174,9 +200,8 @@ The recording system allows you to capture 2-minute sequences of character actio
 - Test ability combinations before committing
 
 **Optimization Tips**
-- Recordings automatically compress to save memory
-- Redundant movement events are filtered out
-- Only significant position changes create keyframes
+- The single-keypress system means recordings are already tiny — one small intent event per press
+- There are no keyframes: positions are derived on playback by replaying intent from the recorded start tile
 - Ability events are always preserved at full fidelity
 
 **Common Patterns**
@@ -188,22 +213,24 @@ The recording system allows you to capture 2-minute sequences of character actio
 ### Advanced Recording Features
 
 **State Management**
-- Recording state machine tracks: Idle → Countdown → Recording → Dialog
-- All state transitions logged for debugging
-- Global pause during dialogs ensures no missed actions
-- Event-driven architecture for reliable state changes
+- Recording state machine: Idle → Countdown (3s / 180 ticks) → Recording; modals are tracked separately and gate input while open
+- Exactly one recording can be in progress at a time; the global draft timeline is empty unless one is
+- Character states: **Selected** (controlled, input-driven) and **Ghost** (folded into its arena's master timeline, input ignored)
+- Commit transitions Selected → Ghost; "Record new" on a ghost or the break-out modal's "Take control" transitions Ghost → Selected after unfolding ("Take control" keeps the arena playing; "Record new" restarts it into a countdown)
+- While a modal is open only the selected arena pauses — there is no global pause
 
-**Performance Scaling**
-- Ghosts in current arena update at 60 FPS
-- Adjacent arena ghosts update at 30 FPS
-- Distant arena ghosts update at 10-15 FPS
-- Automatic quality adjustment when performance drops
+**Performance Scaling (future, render-side only)**
+- The simulation always advances every arena on the fixed 60 Hz tick — determinism is never traded away
+- Rendering / visual update rates may later scale down for distant arenas (e.g. 30 FPS adjacent, 10-15 FPS distant)
+- Automatic visual quality adjustment when performance drops
 
 **Technical Details**
-- Timeline events stored as intent (2 bytes) vs transform (48 bytes)
-- Binary search for efficient timeline lookups
-- Zero-allocation helpers for event queries
-- Arc<[T]> for cheap timeline sharing between systems
+- Simulation runs on the fixed 60 Hz timestep: `CYCLE_TICKS = 7_200`, `COUNTDOWN_TICKS = 180`; all timeline math is in ticks, never seconds, using `strict_*`/`wrapping_*`/`%` arithmetic
+- An event is intent, not position: `TimelineEvent { tick: u32, action: Action }` with `Action::Move(IVec2)` or `Action::Ability(u8)` — tiny and `Copy`
+- A recording is `Recording { start, events: Arc<[TimelineEvent]> }` — the start tile anchors every replay; `Arc` makes timeline sharing cheap
+- Each character carries a `RecordingLibrary` (hashmap: arena → recording); lookups by key only — the sim never iterates it
+- Each arena root carries the master timeline: a tick-sorted `Vec<GhostEvent>` (event + owning ghost entity) with a playback cursor; **fold** merges a recording in, **unfold** retains everything but one ghost's events
+- Commits are idempotent by construction: unfold first, then fold; the library insert replaces
 
 ---
 
@@ -265,7 +292,7 @@ Each class brings unique tactical advantages and 4 specialized abilities:
 ## Arena System & Boss Battles
 
 ### Arena Structure
-- **Grid Size**: 66×31 tiles per arena (1,254 tiles × 9 arenas = 11,286 total battlefield)
+- **Grid Size**: 66×31 tiles per arena (2,046 tiles × 9 arenas = 18,414 total battlefield)
 - **Boss Positioning**: Each arena contains one major boss matching its class theme
 - **Multi-Arena Management**: All 9 arenas run independently with separate timers
 - **Scaling Difficulty**: Normal → Heroic → Mythic progression tiers
@@ -303,23 +330,23 @@ Grid Layout (3×3):
 ### Arena Navigation & Camera System
 - **Arena Selection**: Use [ and ] keys to cycle through arenas (0-8, wraps around)
 - **Camera Zoom**: Press P to toggle between single arena view and all-arenas overview
-- **Visual Indicators**: Current arena highlighted with black border when zoomed out
+- **Visual Indicators**: Current arena highlighted with a white border when zoomed out
 - **Smart Focus**: Camera automatically positions on current arena when zooming in
-- **Character Memory**: Each arena remembers its last active hero for seamless transitions
+- **Character Memory**: Each arena remembers its last selected hero for seamless transitions
 
 ### Character Management Systems
-- **Active Character Toggle**: Tab cycles through heroes in current arena (requires 2+ heroes)
-- **Cross-Arena Movement**: WASD movement seamlessly transitions heroes between adjacent arenas
-- **Arena Boundaries**: Movement past edges teleports character to opposite side of adjacent arena
+- **Selection Toggle**: Tab cycles the Selected marker through heroes in the current arena (requires 2+ heroes)
+- **Cross-Arena Movement**: Arrow-key movement seamlessly transitions heroes between adjacent arenas (edge-walk; opens the interrupt modal while recording)
+- **Arena Boundaries**: Movement past edges teleports the character to the opposite side of the adjacent arena; the outer border of the 3×3 grid is clamped (no wraparound)
 - **Re-parenting System**: Characters automatically become children of their current arena entity
-- **State Preservation**: Heroes maintain active/inactive status when switching arenas
+- **State Preservation**: Heroes keep their selection when edge-walking between arenas
 
 ### Arena Update Logic
 - **Event-Driven Updates**: Arena state refreshes on camera changes or arena transitions
-- **Zoom-Out Behavior**: All characters deactivated (gray) for overview visibility
-- **Zoom-In Behavior**: Restores last active hero or activates first available character
+- **Zoom-Out Behavior**: The overview changes only the camera and HUD theme — selection (and its ring) is untouched
+- **Zoom-In Behavior**: Focuses the current arena; the selected hero keeps its ring
 - **Empty Arena Handling**: Gracefully handles arenas with no characters present
-- **Material System**: Blue material for active heroes, gray for inactive ones
+- **Selection Visuals**: A glowing ring marks the selected hero; ghosts carry a blue ring
 
 ### Boss Mechanics
 - **2-Minute Cycles**: Bosses operate on the same timing as your recordings
@@ -361,7 +388,7 @@ Grid Layout (3×3):
 - **Recruitment Review**: Open and evaluate new character acquisitions
 - **Global Buff Activation**: Use acquired consumables that affect all arenas simultaneously
 - **Strategic Planning**: Review arena status and plan multi-arena coordination
-- **Travel Coordination**: Manage character movement between different arenas
+- **Travel Planning**: Decide which arenas need heroes — travel itself is edge-walking
 
 ---
 
@@ -408,7 +435,7 @@ Grid Layout (3×3):
 - **Revival Abilities**: Cardinals and other healers can resurrect fallen allies
 - **Grid-Based Revival**: Revival spells target specific tiles rather than characters
 - **Timing Requirements**: Revival must occur when dead character is present at target location
-- **Recording Integration**: Deaths and revivals become part of the permanent timeline
+- **Recording Integration**: (Future) deaths and revivals will replay deterministically each cycle — derived from the intent timeline against the boss's fixed pattern, not stored as timeline events
 
 ---
 
@@ -421,7 +448,7 @@ Grid Layout (3×3):
 4. **Perfect Runs**: Complete mastery demonstrated through flawless execution
 
 ### Long-Term Goals
-- **Full Guild Development**: Recruit and develop 320+ heroes across all classes
+- **Full Guild Development**: Recruit and develop a full roster of 320 heroes across all classes
 - **Multi-Arena Excellence**: Successfully manage all 8 arenas simultaneously
 - **Strategic Mastery**: Create sophisticated recording combinations across multiple cycles
 - **Narrative Discovery**: Uncover the deeper story behind the arena conflicts
@@ -481,55 +508,55 @@ The game rewards both analytical optimization and creative experimentation, prov
 
 ## Technical Architecture Principles
 
-### Active Character Query Pattern
+### Selected Character Query Pattern
 
-**Architectural Rule**: All recording system operations should query for the Active Character dynamically rather than storing or passing character entities as parameters.
+**Architectural Rule**: All recording system operations query for the selected character (the `Selected` marker component) dynamically rather than storing or passing character entities as parameters.
 
 #### Implementation Principle
 ```rust
-// ✅ CORRECT - Query Active Character when needed
+// ✅ CORRECT - Query the Selected character when needed
 pub enum RecordingRequest {
-    Start,        // Query active_character_q.single() when processing
+    Start,        // Query the Selected character when processing
     Stop { reason: StopReason },
-    ShowDialog,   // Query active_character_q.single() when showing dialog
-    Commit,       // Query active_character_q.single() when committing
-    Clear,        // Query active_character_q.single() when clearing
+    ShowModal,    // Query the Selected character when showing the modal
+    Commit,       // Query the Selected character when committing
+    Clear,        // Query the Selected character when clearing
 }
 
 // ❌ INCORRECT - Storing/passing entities
 pub enum RecordingRequest {
     Start { entity: Entity },           // Don't store entities
-    ShowDialog { character: Entity },   // Don't pass character data
+    ShowModal { character: Entity },    // Don't pass character data
 }
 ```
 
 #### Rationale
-1. **Single Source of Truth**: The `Active` component determines which character receives input
-2. **R Key Behavior**: "R always operates on whoever is CURRENTLY active when pressed"
-3. **Dynamic Dialog Behavior**: Dialog should switch if player changes active character
-4. **Type Safety**: `active_character_q.single()` guarantees exactly one Active Character
+1. **Single Source of Truth**: The `Selected` marker determines which character receives input
+2. **R Key Behavior**: "R always operates on whoever is CURRENTLY selected when pressed"
+3. **Dynamic Modal Behavior**: The modal always reflects the currently selected character
+4. **Type Safety**: The `Single` system param guarantees exactly one selected character
 5. **Simplicity**: Eliminates entity synchronization and parameter passing complexity
 
 #### Query Pattern
 ```rust
-// Standard query for Active Character operations
-active_character_q: Single<(Entity, Option<&Ghost>), (With<Character>, With<Active>)>
+// Standard query for selected-character operations (Bevy 0.18 Single param)
+selected_q: Single<(Entity, Option<&Ghost>), With<Selected>>
 
 // Usage in recording systems
-let (character_entity, ghost_marker) = active_character_q.single();
+let (character_entity, ghost_marker) = *selected_q;
 ```
 
 #### Benefits
 - **Architectural Consistency**: All recording operations follow the same pattern
 - **Reduced Coupling**: No entity parameters between systems
-- **Automatic Updates**: Dialog and UI automatically reflect current active character
+- **Automatic Updates**: Modals and UI automatically reflect the currently selected character
 - **Performance**: O(1) queries with minimal overhead
 - **Maintainability**: Eliminates entity storage synchronization bugs
 
 #### Application Scope
 This pattern applies to:
 - All `RecordingRequest` variants
-- Dialog state management (`RecordingMode::DialogPaused`)
+- Modal state management (modal open ⇒ only the selected arena's clock pauses)
 - Recording state tracking
 - UI systems that need character context
 - Any system that operates on "the current character"

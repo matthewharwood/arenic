@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); case \"$INPUT\" in *'\"stop_hook_active\":true'*) exit 0;; esac; cd \"$CLAUDE_PROJECT_DIR\" && OUT=$(just gate 2>&1) && exit 0; printf 'just gate FAILED:\\n%s\\n' \"$(printf '%s' \"$OUT\" | tail -50)\" >&2; exit 2",
+            "timeout": 600,
+            "statusMessage": "Running just gate (fmt · check · lint · test · doctest)…"
+          }
+        ]
+      }
+    ]
+  }
+}

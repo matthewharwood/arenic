@@ -13,9 +13,10 @@ storybook:
 icons:
     cargo xtask icons
 
-# Build the docs + design-system book into ./book.
+# Build the docs + design-system book into ./book, then print a clickable link.
 book:
     mdbook build
+    @echo "Read: file://{{justfile_directory()}}/book/index.html"
 
 # Serve the book locally with live reload.
 book-serve:
@@ -36,8 +37,31 @@ web:
 dev:
     cd crates/arenic && trunk serve --public-url / index.html
 
+# Check formatting without touching files (CI-safe).
+fmt:
+    cargo fmt --all --check
+
+# Apply formatting.
+fmt-fix:
+    cargo fmt --all
+
+# Type-check everything (all targets, all features) without codegen.
+check:
+    cargo check --workspace --all-targets --all-features
+
+# Run the test suites (xtask, a dev tool, is excluded).
+test:
+    cargo test --workspace --exclude xtask
+
+# Compile + run every rustdoc example.
+doctest:
+    cargo test --workspace --doc
+
 # Lint the shipped crates (xtask, a dev tool, is excluded).
 lint:
     cargo clippy --workspace --exclude xtask --all-targets --all-features -- -D warnings
 
-gate: lint book
+# THE gate: everything must be green before a change is done. Runs after every
+# Claude Code turn (Stop hook in .claude/settings.json) and doubles as the
+# CI/CD gate. Ordered fast-fail: format → types → lints → tests → doctests.
+gate: fmt check lint test doctest
