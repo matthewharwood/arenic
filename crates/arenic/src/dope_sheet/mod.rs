@@ -19,12 +19,18 @@
 //!   `=`/`-` = zoom at playhead · `\` = toggle last-zoom ↔ full cycle ·
 //!   `A` = frame all · `` ` `` = collapse the panel.
 //!
-//! Keyframe pills, selection, and editing land in v2 (ARE-42); this file owns
-//! the structure they mount into. Author-feature only; nothing here ships.
+//! The structure lives here; the v2 keyframe-editing grammar (selection,
+//! modal G/ripple, ease ops, the inline interpolation panel) is [`edit`].
+//! Author-feature only; nothing here ships.
+
+mod edit;
+
+use edit::{KeyPill, RowFocus, SelKey, SheetSelection};
 
 use arenic_game::Boss;
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
+use arenic_game::effect::EffectKind;
 use arenic_game::encounter::PHASE_TICKS;
 use arenic_game::grid::TileMover;
 use arenic_game::layer::{ArenaStack, LayerId, LayerKind};
@@ -320,6 +326,50 @@ fn spawn_strip_segments(
     }
 }
 
+/// The v2 keyframe pills: one per effect-track key in view, clickable
+/// (selection lives in [`edit`]). Scale keys wear the primary tint, Opacity
+/// the warning tint; selected pills go full-bright with an outline-ish pop.
+fn spawn_key_pills(
+    strip: &mut ChildSpawnerCommands,
+    view: &SheetView,
+    layer: &arenic_game::layer::Layer,
+    selection: &SheetSelection,
+    theme: &Theme,
+) {
+    for track in &layer.effects {
+        for key in &track.keys {
+            let x = view.px_of(key.tick);
+            if !(0.0..=KEY_W).contains(&x) {
+                continue;
+            }
+            let sel = SelKey {
+                layer: layer.id,
+                kind: track.kind,
+                tick: key.tick,
+            };
+            let selected = selection.keys.contains(&sel);
+            let base = match track.kind {
+                EffectKind::Scale => theme.primary,
+                EffectKind::Opacity => theme.warning,
+            };
+            strip.spawn((
+                KeyPill(sel),
+                Interaction::default(),
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(x - 4.0),
+                    top: Val::Px(if selected { 4.0 } else { 6.0 }),
+                    width: Val::Px(8.0),
+                    height: Val::Px(if selected { 16.0 } else { 12.0 }),
+                    ..default()
+                },
+                BackgroundColor(base.with_alpha(if selected { 1.0 } else { 0.75 })),
+                GlobalZIndex(8),
+            ));
+        }
+    }
+}
+
 /// Rebuilds rows + ruler whenever the focused stack, the focused arena, or
 /// the view changes. At this scale (≤ a dozen rows, ~100 nodes) a rebuild is
 /// cheaper than diffing; v2's editing layer mounts into these rows.
@@ -328,6 +378,7 @@ fn rebuild_sheet(
     mono: Res<MonoFont>,
     current: Res<CurrentArena>,
     view: Res<SheetView>,
+    selection: Res<SheetSelection>,
     stacks: Query<(&Arena, &ArenaStack)>,
     channels: Single<Entity, With<SheetChannels>>,
     tracks: Single<Entity, With<SheetTracks>>,
@@ -400,8 +451,11 @@ fn rebuild_sheet(
                 },
             )
         };
+        let row_focused = selection.layer == Some(layer.id);
         commands.entity(*channels).with_children(|col| {
             col.spawn((
+                RowFocus(layer.id),
+                Interaction::default(),
                 Node {
                     height: Val::Px(ROW_H),
                     width: Val::Percent(100.0),
@@ -410,7 +464,11 @@ fn rebuild_sheet(
                     column_gap: Val::Px(4.0),
                     ..default()
                 },
-                BackgroundColor(theme.surface_2().with_alpha(0.4 * row_alpha)),
+                BackgroundColor(
+                    theme
+                        .surface_2()
+                        .with_alpha(if row_focused { 0.85 } else { 0.4 } * row_alpha),
+                ),
             ))
             .with_children(|row| {
                 row.spawn((
@@ -457,6 +515,7 @@ fn rebuild_sheet(
                         &layer.kind,
                         theme.primary.with_alpha(row_alpha),
                     );
+                    spawn_key_pills(strip, &view, layer, &selection, &theme);
                 });
         });
     }
@@ -832,7 +891,8 @@ pub(crate) struct DopeSheetPlugin;
 
 impl Plugin for DopeSheetPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SheetView>()
+        app.add_plugins(edit::EditPlugin)
+            .init_resource::<SheetView>()
             .add_message::<RefoldPreview>()
             .add_systems(OnEnter(AppState::Intro), setup_sheet)
             .add_systems(
@@ -842,7 +902,8 @@ impl Plugin for DopeSheetPlugin {
                     rebuild_sheet.run_if(
                         stacks_changed
                             .or(resource_changed::<CurrentArena>)
-                            .or(resource_changed::<SheetView>),
+                            .or(resource_changed::<SheetView>)
+                            .or(resource_changed::<SheetSelection>),
                     ),
                     update_playhead,
                     scrub_on_ruler,
