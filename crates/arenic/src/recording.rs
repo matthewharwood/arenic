@@ -7,10 +7,10 @@
 //! Character Query Pattern). Every modal decision lands here in [`handle_choice`],
 //! the single, idempotent place state transitions are applied.
 
-use std::f32::consts::FRAC_PI_2;
-
+use arenic_game::Boss;
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
+use arenic_game::encounter::{ActiveDifficulty, Difficulty};
 use arenic_game::grid::TileMover;
 use arenic_game::timeline::{
     Action, ArenaClock, ArenaTimeline, COUNTDOWN_TICKS, CYCLE_TICKS, Ghost, Recording,
@@ -26,7 +26,7 @@ use crate::intro_scene::{CurrentArena, Selected};
 use crate::modal::{
     ActiveModal, Choice, ModalChoice, ModalLatch, ModalRoot, no_modal, spawn_modal,
 };
-use crate::states::AppState;
+use crate::states::{AppState, not_tile_editing};
 
 /// The one in-flight recording. `Countdown` holds the recording arena at tick 0
 /// for 3 seconds; `Recording` captures until the player commits/discards or the
@@ -54,8 +54,28 @@ pub(crate) struct DraftTimeline {
 #[derive(Resource)]
 pub(crate) struct PendingWalk(pub(crate) IVec2);
 
+/// Written once per Commit — the seam the author feature listens on to mirror
+/// a boss's committed staff into a versioned score file. Builds without that
+/// consumer (plain game, and wasm even with the feature) write it and nobody
+/// reads it (the buffer just drains), so the fields look dead there.
+#[derive(Message)]
+#[cfg_attr(
+    not(all(feature = "author", not(target_arch = "wasm32"))),
+    allow(dead_code)
+)]
+pub(crate) struct RecordingCommitted {
+    pub(crate) entity: Entity,
+    pub(crate) arena: Arena,
+    /// Stamped at COMMIT time — the mirror runs unordered against
+    /// [`handle_choice`], so reading [`ActiveDifficulty`] there could see a
+    /// post-commit `D` press.
+    pub(crate) difficulty: Difficulty,
+    pub(crate) recording: Recording,
+}
+
 /// Marks the blue ring child a [`Ghost`] wears (see [`ghost_ring_add`]).
 #[derive(Component)]
+#[component(immutable)]
 struct GhostRing;
 
 /// One element of the REC/clock HUD strip under the top bar.
@@ -90,6 +110,12 @@ pub(crate) fn no_pending_walk(pending: Option<Res<PendingWalk>>) -> bool {
 
 fn counting_down(state: Res<RecordingState>) -> bool {
     matches!(*state, RecordingState::Countdown { .. })
+}
+
+/// `m:ss` of a cycle tick — the clock format every HUD strip shares.
+pub(crate) fn fmt_tick(tick: u32) -> String {
+    let secs = tick / TICKS_PER_SECOND;
+    format!("{}:{:02}", secs / 60, secs % 60)
 }
 
 /// Holds `clock`/`timeline` at tick 0 (paused) and arms the draft — the 3-second
@@ -135,8 +161,10 @@ fn fold_as_ghost(
 }
 
 /// Snaps every ghost parented to `arena` back to its recorded start tile —
-/// `except` skips a hero whose `Ghost` marker is mid-removal (commands defer).
-fn snap_arena_ghosts(
+/// `except` skips an entity whose `Ghost` marker is mid-insertion/removal
+/// (commands defer), posed by hand by the caller. Shared by the recording
+/// flows, the score sync, and the author tool's scrub/restart.
+pub(crate) fn snap_arena_ghosts(
     arena: Entity,
     ghosts: &mut Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
     except: Option<Entity>,
@@ -169,12 +197,12 @@ fn handle_r_key(
             return Ok(());
         };
         let arena_entity = child_of.parent();
-        let index = arena_ids.get(arena_entity)?.index() as u8;
+        let arena = *arena_ids.get(arena_entity)?;
         (
             arena_entity,
             is_ghost,
             IVec2::new(mover.col, mover.row),
-            library.0.contains_key(&index),
+            library.0.contains_key(&arena),
         )
     };
     let (arena, mut clock, mut timeline) = arenas.get_mut(arena_entity)?;
@@ -245,20 +273,28 @@ fn handle_r_key(
     Ok(())
 }
 
-/// Mirrors the not-yet-implemented ability slots (2-4) into the draft while
-/// recording, stamped with the recording arena's current tick. Captured in
-/// `Update` so `just_pressed` edges are never missed; the stamp quantizes the
-/// intent onto the tick grid. Anything with a LIVE effect records atomically
-/// where it applies instead — movement in `travel::move_selected`, slot 1 in
-/// `intro_scene::fire_holy_nova` — so the committed staff can never contain an
-/// event the live take didn't perform (or vice versa).
+/// Mirrors a HERO's ability slots 2-4 into the draft while recording, stamped
+/// with the recording arena's current tick. Captured in `Update` so
+/// `just_pressed` edges are never missed; the stamp quantizes the intent onto
+/// the tick grid. Hero slots 2-4 are inert on both sides (no live cast, no
+/// playback cast), so recording them silently keeps the staff faithful. A
+/// possessed BOSS is skipped here entirely: every boss slot has a live effect
+/// (the phase loadout), so `author::boss_cast_slots` captures cast + event
+/// atomically — the committed staff can never contain an event the live take
+/// didn't perform (or vice versa). Anything else with a LIVE effect records
+/// atomically where it applies — movement in `travel::move_selected`, hero
+/// slot 1 in `intro_scene::fire_holy_nova`.
 fn capture_intent(
     keys: Res<ButtonInput<KeyCode>>,
-    selected: Single<&ChildOf, With<Selected>>,
+    selected: Single<(&ChildOf, Has<Boss>), With<Selected>>,
     clocks: Query<&ArenaClock>,
     mut draft: ResMut<DraftTimeline>,
 ) -> Result {
-    let tick = clocks.get(selected.parent())?.tick;
+    let (child_of, is_boss) = *selected;
+    if is_boss {
+        return Ok(());
+    }
+    let tick = clocks.get(child_of.parent())?.tick;
     const SLOTS: [(KeyCode, KeyCode, u8); 3] = [
         (KeyCode::Digit2, KeyCode::Numpad2, 2),
         (KeyCode::Digit3, KeyCode::Numpad3, 3),
@@ -326,6 +362,8 @@ fn auto_stop(
 fn handle_choice(
     mut commands: Commands,
     mut choices: MessageReader<ModalChoice>,
+    mut commits: MessageWriter<RecordingCommitted>,
+    difficulty: Res<ActiveDifficulty>,
     mut state: ResMut<RecordingState>,
     mut draft: ResMut<DraftTimeline>,
     mut heroes: ParamSet<(
@@ -394,7 +432,7 @@ fn handle_choice(
                 let mut p0 = heroes.p0();
                 let (_, _, mut library, mut mover, mut transform) = p0.single_mut()?;
                 let (arena, mut clock, mut timeline) = arenas.get_mut(arena_entity)?;
-                library.0.insert(arena.index() as u8, recording.clone());
+                library.0.insert(*arena, recording.clone());
                 fold_as_ghost(
                     &mut commands,
                     hero,
@@ -404,6 +442,12 @@ fn handle_choice(
                     &mut mover,
                     &mut transform,
                 );
+                commits.write(RecordingCommitted {
+                    entity: hero,
+                    arena: *arena,
+                    difficulty: difficulty.0,
+                    recording,
+                });
             }
             snap_arena_ghosts(arena_entity, &mut heroes.p1(), None);
         }
@@ -412,7 +456,7 @@ fn handle_choice(
                 let mut p0 = heroes.p0();
                 let (_, _, library, mut mover, mut transform) = p0.single_mut()?;
                 let (arena, mut clock, mut timeline) = arenas.get_mut(arena_entity)?;
-                let Some(recording) = library.0.get(&(arena.index() as u8)) else {
+                let Some(recording) = library.0.get(arena) else {
                     // No cache after all (shouldn't happen) — at least resume.
                     clock.paused = false;
                     return Ok(());
@@ -459,14 +503,22 @@ fn handle_choice(
 
 /// Dresses a fresh [`Ghost`] in its blue ring — the sibling of the white
 /// selection halo (same `Annulus` recipe, ghost-blue, slightly wider so the two
-/// read concentrically on a selected ghost). Parented to the puck, so it follows
-/// playback; the puck is X-rotated 90°, so the ring counter-rotates to lie flat.
+/// read concentrically on a selected ghost). Parented to the wearer, so it
+/// follows playback. Wearers differ in pose — a puck is X-rotated 90°, a boss
+/// root is not — so the ring counter-rotates by the parent's inverse to lie
+/// flat, parked just above the board (`z = 0.03` world) whatever the parent's
+/// own height.
 fn ghost_ring_add(
     add: On<Add, Ghost>,
     mut commands: Commands,
+    transforms: Query<&Transform>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let (inverse, lift) = transforms
+        .get(add.entity)
+        .map(|t| (t.rotation.inverse(), 0.03 - t.translation.z))
+        .unwrap_or((Quat::IDENTITY, 0.0));
     let blue = Color::srgb(0.35, 0.55, 1.0);
     let l = blue.to_linear();
     commands.spawn((
@@ -477,7 +529,7 @@ fn ghost_ring_add(
             emissive: LinearRgba::rgb(l.red, l.green, l.blue) * 2.5,
             ..default()
         })),
-        Transform::from_xyz(0.0, -0.02, 0.0).with_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
+        Transform::from_translation(inverse * Vec3::new(0.0, 0.0, lift)).with_rotation(inverse),
         NotShadowCaster,
         NotShadowReceiver,
         ChildOf(add.entity),
@@ -584,8 +636,7 @@ fn update_rec_hud(
     for (part, mut text, mut color, mut visibility) in &mut parts {
         match part {
             RecHudPart::Clock => {
-                let secs = clock.tick / TICKS_PER_SECOND;
-                set_text(&mut text, format!("{}:{:02}", secs / 60, secs % 60));
+                set_text(&mut text, fmt_tick(clock.tick));
                 set_color(&mut color, theme.text_1());
             }
             RecHudPart::Rec => {
@@ -627,6 +678,7 @@ impl Plugin for RecordingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RecordingState>()
             .init_resource::<DraftTimeline>()
+            .add_message::<RecordingCommitted>()
             .add_observer(ghost_ring_add)
             .add_observer(ghost_ring_remove)
             .add_systems(OnEnter(AppState::Intro), setup_rec_hud)
@@ -637,7 +689,8 @@ impl Plugin for RecordingPlugin {
                     handle_r_key.run_if(
                         input_just_pressed(KeyCode::KeyR)
                             .and(no_modal)
-                            .and(no_pending_walk),
+                            .and(no_pending_walk)
+                            .and(not_tile_editing),
                     ),
                     capture_intent.run_if(is_recording.and(no_modal)),
                     // Gated on a pending message: the heavy ParamSet (and its

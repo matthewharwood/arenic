@@ -83,6 +83,21 @@ mono.0.clone(), font_size, ..default() }`). All weights of both families live in
 when another weight is needed; the embed pins only Medium + Mono-Medium. Don't
 hard-code other font files for body UI — change the default via `DefaultFontPlugin`.
 
+## Boss encounters & author mode
+
+`arenic_game::encounter` is the boss framework: a 2-minute timeline in **3
+phases × 4 ability slots** per **difficulty** (Normal/Heroic/Mythic — each
+difficulty owns its own timelines). Boss abilities are the same data structure
+as hero abilities (`AbilityId` — all slots are Holy Nova placeholders today);
+`loadout()` is the per-boss source-of-truth table. Authored timelines live as
+**versioned RON files** under `assets/encounters/<arena>/<difficulty>/`
+(`boss.vNNNN.ron`, `tiles.vNNNN.ron` — see the README there): readers load the
+highest version and re-check every cycle wrap; roll back by deleting the newest
+file. **`just author`** runs the game with the authoring tools (`author` cargo
+feature, never shipped): `B` possesses a boss (record it exactly like a hero),
+`D` cycles difficulty, `T` opens the tile editor (scrub `,`/`.`, marks `I`/`O`,
+paint `Space`, save `W`), `F5` restarts the arena.
+
 ## Build automation — no shell scripts
 
 Automation logic goes in the **`xtask`** crate as a subcommand (`cargo xtask

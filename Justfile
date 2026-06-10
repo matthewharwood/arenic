@@ -5,6 +5,12 @@
 game:
     cargo run -p arenic
 
+# Run the game with the authoring tools enabled (possess + record bosses, the
+# tile choreography editor, versioned score files). The `author` cargo feature
+# never ships: `just game`, release, and web builds exclude it.
+author:
+    cargo run -p arenic --features author
+
 # Run the storybook / design-system harness natively.
 storybook:
     cargo run -p arenic_storybook

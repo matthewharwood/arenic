@@ -3,11 +3,12 @@
 //! each arena its signature fauna motion.
 //!
 //! This module owns the shared **types + math**: the [`Mote`] silhouettes, the
-//! per-arena [`SwarmMotion`] archetypes, the [`SwarmMember`] component, and the pure
+//! per-arena [`SwarmMotion`] archetypes, the [`SwarmMember`] component, the pure
 //! placement/motion functions ([`swarm_home`], [`swarm_amp`], [`swarm_offset`],
-//! [`mote_mesh`], [`swarm_material`]). Each binary keeps its own spawn + animate
-//! systems (the storybook respawns per story + re-tones on theme change; the game
-//! spawns all nine arenas once with baked colours) — both built on these.
+//! [`mote_mesh`], [`swarm_material`]), and the [`animate_swarm`] driver both
+//! binaries register. Each binary keeps only its own *spawn* system (the
+//! storybook respawns per story + re-tones on theme change; the game spawns all
+//! nine arenas once with baked colours) — both built on these.
 
 use std::f32::consts::TAU;
 
@@ -80,7 +81,7 @@ const SWARM_RING_Y: f32 = 3.4;
 const SWARM_Z: f32 = -1.4;
 const SWARM_AMP: Vec3 = Vec3::new(1.4, 1.0, 0.9);
 /// Global slow factor on swarm time — keeps the drift calm and non-distracting.
-pub const SWARM_TIME_SCALE: f32 = 0.5;
+const SWARM_TIME_SCALE: f32 = 0.5;
 /// Compile-time invariant: the swarm's highest reach (`SWARM_Z + SWARM_AMP.z = -0.5`)
 /// stays well below every floor plane (game `z = 0`, storybook `z = -0.02`), so the
 /// swarm goes *around and under* the ground, never *through* it.
@@ -207,6 +208,17 @@ pub fn swarm_offset(motion: SwarmMotion, phase: f32, t: f32, amp: Vec3) -> (Vec3
                 Quat::from_rotation_z(0.5 * s(0.35)),
             )
         }
+    }
+}
+
+/// Drives every [`SwarmMember`]'s drift + spin from its motion archetype — the
+/// shared animate system both binaries register alongside their own spawners.
+pub fn animate_swarm(time: Res<Time>, mut swarm: Query<(&SwarmMember, &mut Transform)>) {
+    let t = time.elapsed_secs() * SWARM_TIME_SCALE;
+    for (m, mut tf) in &mut swarm {
+        let (offset, rot) = swarm_offset(m.motion, m.phase, t, m.amp);
+        tf.translation = m.home + offset;
+        tf.rotation = rot;
     }
 }
 

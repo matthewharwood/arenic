@@ -17,11 +17,14 @@
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::grid::{ARENAS, GRID_H, GRID_W};
 
 /// The state of one board tile. Add variants here + a material in [`TileMaterials`].
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+/// Serde because tile-choreography keyframes ([`crate::tile_script`]) name kinds
+/// in their RON score files.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 pub enum TileKind {
     /// A plain illuminated dot.
     #[default]

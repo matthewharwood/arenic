@@ -12,6 +12,34 @@ use bevy::audio::AudioSource;
 use bevy::color::Alpha;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
+use serde::{Deserialize, Serialize};
+
+/// The identity of one castable ability — THE shared data structure for hero
+/// and boss abilities alike. A boss ability is built from the exact same pieces
+/// as a hero ability (generally a longer / stronger / weaker variant of one),
+/// so the two can never structurally drift: add a variant here and a
+/// [`cast`] arm, and both heroes and the boss phase loadouts
+/// ([`crate::encounter::loadout`]) can slot it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub enum AbilityId {
+    HolyNova,
+}
+
+/// Casts `ability` from `caster` — the ONE dispatch point shared by live input,
+/// hero ghost playback, and boss phase loadouts, so a cast always means the
+/// same thing no matter who triggered it.
+pub fn cast(
+    commands: &mut Commands,
+    ability: AbilityId,
+    meshes: &AbilityMeshes,
+    materials: &mut Assets<StandardMaterial>,
+    sfx: &AbilitySfx,
+    caster: Entity,
+) {
+    match ability {
+        AbilityId::HolyNova => cast_holy_nova(commands, meshes, materials, sfx, caster),
+    }
+}
 
 /// An expanding, fading sphere burst. Driven to completion + despawn by
 /// [`update_ability_bursts`]; create one with [`holy_nova`].

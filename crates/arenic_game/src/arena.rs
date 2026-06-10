@@ -19,7 +19,7 @@ use crate::theme::{ThemeId, Tint};
 /// One of the nine arenas (3×3 grid, row-major). The discriminant IS the grid index.
 /// Also a component: the game tags each arena root with its `Arena`, so systems can
 /// resolve an entity's arena (e.g. a hero's `ChildOf` parent) without a second id.
-#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[component(immutable)]
 pub enum Arena {
     Hunter,
@@ -69,6 +69,23 @@ impl Arena {
             Arena::Alchemist => "Crucible",
             Arena::Merchant => "Casino",
             Arena::Bard => "Gala",
+        }
+    }
+
+    /// The arena's kebab-case slug — its directory name under
+    /// `assets/encounters/` (see [`crate::encounter`]). Derived from [`Self::name`],
+    /// pinned here so a display-name tweak can't silently orphan score files.
+    pub fn slug(self) -> &'static str {
+        match self {
+            Arena::Hunter => "labyrinth",
+            Arena::Guildmaster => "guild-house",
+            Arena::Cardinal => "sanctum",
+            Arena::Forager => "mountain",
+            Arena::Warrior => "bastion",
+            Arena::Thief => "pawnshop",
+            Arena::Alchemist => "crucible",
+            Arena::Merchant => "casino",
+            Arena::Bard => "gala",
         }
     }
 
@@ -155,7 +172,7 @@ impl Arena {
             tint,
         };
         let (sky, fg) = self.voices();
-        let (swarm, boss, props): (SwarmSpec, BossSpec, [PropSpec; 3]) = match self {
+        let (swarm, boss, props): (SwarmSpec, BossSpec, [PropSpec; _]) = match self {
             Arena::Hunter => (
                 SwarmSpec {
                     motion: Patrol,
@@ -408,6 +425,22 @@ mod tests {
             assert_eq!(Arena::from_index(i), Some(arena));
         }
         assert_eq!(Arena::from_index(9), None);
+    }
+
+    #[test]
+    fn slugs_match_names_and_are_path_safe() {
+        for arena in Arena::ALL {
+            let expected = arena.name().to_lowercase().replace(' ', "-");
+            assert_eq!(arena.slug(), expected, "slug drifted from name");
+            assert!(
+                arena
+                    .slug()
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '-'),
+                "slug {} is not path-safe",
+                arena.slug()
+            );
+        }
     }
 
     #[test]

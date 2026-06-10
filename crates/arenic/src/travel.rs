@@ -4,6 +4,7 @@
 //! the scene owns what the world *is*; this module owns how the selected hero
 //! *moves through it* (RULEBOOK → Travel: Leaving and Returning).
 
+use arenic_game::Boss;
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
 use arenic_game::grid::{MAX_COL, MAX_ROW, TileMover, arrow_delta, arrow_pressed};
@@ -12,15 +13,18 @@ use bevy::prelude::*;
 
 use crate::intro_scene::{CurrentArena, Selected};
 use crate::modal::{Choice, ModalLatch, no_modal, spawn_modal};
-use crate::recording::{DraftTimeline, PendingWalk, RecordingState, is_idle, not_counting_down};
-use crate::states::AppState;
+use crate::recording::{
+    DraftTimeline, PendingWalk, RecordingState, is_idle, no_pending_walk, not_counting_down,
+};
+use crate::states::{AppState, not_tile_editing};
 
 /// Moves the SELECTED puck one tile per arrow-key press. Only the selected puck
 /// responds — the others hold position. Three special cases (RULEBOOK):
 /// a selected **ghost** never moves — an arrow press opens the *Break out?* modal;
 /// stepping past the arena edge **while recording** opens the *Like the
 /// recording?* interrupt modal; the same step while idle **edge-walks** into the
-/// adjacent arena.
+/// adjacent arena. A possessed [`Boss`] never edge-walks at all — its arena IS
+/// its world, so an edge step clamps exactly like the outer border.
 fn move_selected(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
@@ -35,6 +39,7 @@ fn move_selected(
             &mut Transform,
             &ChildOf,
             Has<Ghost>,
+            Has<Boss>,
             &RecordingLibrary,
         ),
         With<Selected>,
@@ -44,7 +49,8 @@ fn move_selected(
     mut current: ResMut<CurrentArena>,
 ) -> Result {
     let delta = arrow_delta(&keys);
-    let (hero, mut mover, mut transform, child_of, is_ghost, library) = selected.into_inner();
+    let (hero, mut mover, mut transform, child_of, is_ghost, is_boss, library) =
+        selected.into_inner();
     let arena_entity = child_of.parent();
     let (_, arena) = arena_roots.get(arena_entity)?;
     let recording = matches!(*state, RecordingState::Recording);
@@ -72,7 +78,7 @@ fn move_selected(
 
     let target = IVec2::new(mover.col.strict_add(delta.x), mover.row.strict_add(delta.y));
     let inside = (0..=MAX_COL).contains(&target.x) && (0..=MAX_ROW).contains(&target.y);
-    let crossing = if inside {
+    let crossing = if inside || is_boss {
         None
     } else {
         adjacent_entry(arena.index(), mover.col, mover.row, delta)
@@ -174,15 +180,16 @@ fn edge_walk(
     current: &mut CurrentArena,
 ) -> Result {
     let (to_index, col, row) = entry;
-    let Some((to_arena, arena)) = arena_roots.iter().find(|(_, a)| a.index() == to_index) else {
-        return Ok(());
-    };
+    let (to_arena, arena) = arena_roots
+        .iter()
+        .find(|(_, a)| a.index() == to_index)
+        .ok_or("invariant: adjacent_entry returned an arena index with no spawned root")?;
     mover.snap_to(transform, col, row);
     commands.entity(hero).insert(ChildOf(to_arena));
     current.0 = to_index;
 
     // Returning with a staff for this arena? Offer to fold it back in.
-    if library.0.contains_key(&(to_index as u8)) {
+    if library.0.contains_key(arena) {
         let mut clock = clocks.get_mut(to_arena)?;
         let _ = spawn_modal(
             commands,
@@ -228,9 +235,8 @@ fn perform_pending_walk(
     commands.remove_resource::<PendingWalk>();
     let (hero, mut mover, mut transform, child_of, library) = selected.into_inner();
     let (_, arena) = arena_roots.get(child_of.parent())?;
-    let Some(entry) = adjacent_entry(arena.index(), mover.col, mover.row, delta) else {
-        return Ok(());
-    };
+    let entry = adjacent_entry(arena.index(), mover.col, mover.row, delta)
+        .ok_or("invariant: PendingWalk held a step that no longer crosses an arena edge")?;
     edge_walk(
         &mut commands,
         &mut latch,
@@ -256,12 +262,14 @@ impl Plugin for TravelPlugin {
             (
                 // A live PendingWalk suppresses arrow movement for the one frame
                 // perform_pending_walk needs — otherwise both could move the hero
-                // in the same frame off a stale ChildOf.
+                // in the same frame off a stale ChildOf. The author tile editor
+                // borrows the arrows for its cursor while open.
                 move_selected.run_if(
                     arrow_pressed
                         .and(no_modal)
                         .and(not_counting_down)
-                        .and(not(resource_exists::<PendingWalk>)),
+                        .and(no_pending_walk)
+                        .and(not_tile_editing),
                 ),
                 perform_pending_walk
                     .run_if(resource_exists::<PendingWalk>.and(no_modal).and(is_idle)),

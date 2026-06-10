@@ -17,7 +17,10 @@ use std::sync::Arc;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 
-use crate::ability::{AbilityMeshes, AbilitySfx, cast_holy_nova};
+use crate::ability::{AbilityMeshes, AbilitySfx, cast};
+use crate::arena::Arena;
+use crate::boss::Boss;
+use crate::encounter::{ActiveDifficulty, resolve_ability};
 use crate::grid::TileMover;
 
 /// Sim ticks per second — the fixed-timestep rate everything below counts in.
@@ -36,8 +39,10 @@ pub struct TimelineEvent {
     pub action: Action,
 }
 
-/// A recordable intent — a tile step or an ability slot (`1..=4`). Slots 2-4 are
-/// recorded but are no-ops on playback today (only Holy Nova exists).
+/// A recordable intent — a tile step or an ability slot (`1..=4`). On playback
+/// a hero ghost casts only slot 1 (slots 2-4 are recorded but inert until more
+/// hero abilities exist); a boss ghost resolves every slot through its phase
+/// loadout ([`crate::encounter::resolve_ability`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Move(IVec2),
@@ -53,11 +58,11 @@ pub struct Recording {
     pub events: Arc<[TimelineEvent]>,
 }
 
-/// A character's per-arena library of recordings, keyed by arena index — its
+/// A character's per-arena library of recordings, keyed by [`Arena`] — its
 /// staff per arena. Sim code only ever looks up by key; never iterate this for
 /// simulation (HashMap order is nondeterministic).
 #[derive(Component, Default)]
-pub struct RecordingLibrary(pub HashMap<u8, Recording>);
+pub struct RecordingLibrary(pub HashMap<Arena, Recording>);
 
 /// Present while a character is folded into its arena's master timeline: playback
 /// drives it and direct input is ignored. `start` is the tile the ghost snaps to
@@ -151,18 +156,21 @@ pub struct TimelineSet;
 
 /// Applies every master-timeline event whose tick has arrived: `Move` steps the
 /// ghost's [`TileMover`] (clamped — recorded moves never edge-walk) and
-/// `Ability(1)` casts Holy Nova from the ghost; slots 2-4 are no-ops for now.
-/// Runs before [`tick_clocks`], so an event plays exactly while `clock.tick`
-/// equals its recorded tick.
+/// `Ability(slot)` resolves through [`resolve_ability`] — a hero ghost casts
+/// Holy Nova on slot 1 (2-4 are inert today); a [`Boss`] ghost reads the slot
+/// from its phase loadout for the active difficulty. Runs before
+/// [`tick_clocks`], so an event plays exactly while `clock.tick` equals its
+/// recorded tick.
 fn play_timelines(
     mut commands: Commands,
-    mut arenas: Query<(&ArenaClock, &mut ArenaTimeline)>,
-    mut ghosts: Query<(&mut TileMover, &mut Transform), With<Ghost>>,
+    difficulty: Res<ActiveDifficulty>,
+    mut arenas: Query<(&Arena, &ArenaClock, &mut ArenaTimeline)>,
+    mut ghosts: Query<(&mut TileMover, &mut Transform, Has<Boss>), With<Ghost>>,
     meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     sfx: Res<AbilitySfx>,
 ) {
-    for (clock, mut timeline) in &mut arenas {
+    for (arena, clock, mut timeline) in &mut arenas {
         if clock.paused {
             continue;
         }
@@ -178,17 +186,31 @@ fn play_timelines(
             timeline.cursor = timeline.cursor.strict_add(1);
             match action {
                 Action::Move(delta) => {
-                    if let Ok((mut mover, mut transform)) = ghosts.get_mut(ghost) {
+                    if let Ok((mut mover, mut transform, _)) = ghosts.get_mut(ghost) {
                         mover.step(&mut transform, delta);
                     }
                 }
-                Action::Ability(1) => {
-                    cast_holy_nova(&mut commands, &meshes, &mut materials, &sfx, ghost);
+                Action::Ability(slot) => {
+                    let is_boss = ghosts.get(ghost).is_ok_and(|(_, _, boss)| boss);
+                    // Resolve at the event's RECORDED tick, so an ability keeps
+                    // the phase it was authored in even if playback ever lags.
+                    if let Some(id) = resolve_ability(is_boss, *arena, difficulty.0, slot, tick) {
+                        cast(&mut commands, id, &meshes, &mut materials, &sfx, ghost);
+                    }
                 }
-                Action::Ability(_) => {}
             }
         }
     }
+}
+
+/// The events already played at `tick` (every event stamped `<= tick`) and the
+/// playback cursor that goes with them — the scrub math behind the author
+/// tool's timeline seek. Callers snap the arena's ghosts to their starts,
+/// re-apply the returned window's `Move` events (abilities are transient VFX,
+/// skipped), then store the cursor and set the clock to `tick`.
+pub fn seek_window(events: &[GhostEvent], tick: u32) -> (&[GhostEvent], usize) {
+    let upto = events.partition_point(|e| e.tick <= tick);
+    (&events[..upto], upto)
 }
 
 /// Advances every unpaused [`ArenaClock`] one tick; on wrap, rewinds playback
@@ -221,6 +243,7 @@ pub struct TimelinePlugin;
 impl Plugin for TimelinePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Time::<Fixed>::from_hz(TICK_HZ))
+            .init_resource::<ActiveDifficulty>()
             .add_systems(
                 FixedUpdate,
                 (
@@ -303,6 +326,23 @@ mod tests {
         assert_eq!(advance(0), 1);
         assert_eq!(advance(CYCLE_TICKS - 2), CYCLE_TICKS - 1);
         assert_eq!(advance(CYCLE_TICKS - 1), 0);
+    }
+
+    #[test]
+    fn seek_window_includes_the_target_tick_and_syncs_the_cursor() {
+        let (a, b) = two_ghosts();
+        let mut tl = ArenaTimeline::default();
+        fold(&mut tl, a, &rec((0, 0), &[0, 3, 7]));
+        fold(&mut tl, b, &rec((1, 1), &[3]));
+        // Seek to 3: events at 0 and BOTH at 3 have played; cursor sits past them.
+        let (window, cursor) = seek_window(&tl.events, 3);
+        assert_eq!(window.iter().map(|e| e.tick).collect::<Vec<_>>(), [0, 3, 3]);
+        assert_eq!(cursor, 3);
+        // Seek to 2: only tick 0; seeking past the end replays everything.
+        assert_eq!(seek_window(&tl.events, 2).1, 1);
+        assert_eq!(seek_window(&tl.events, 9999).1, tl.events.len());
+        // Seek to 0 still plays tick-0 events (state AT a tick includes its events).
+        assert_eq!(seek_window(&tl.events, 0).1, 1);
     }
 
     #[test]
