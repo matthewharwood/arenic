@@ -95,24 +95,16 @@ pub struct AppliedCell {
     pub prior: TileKind,
 }
 
-/// An arena root's live tile script: the keyframes driving its board, plus the
-/// cells the script currently holds (with what they wore before, so the applier
-/// can revert exactly what it touched — and nothing else). `saved` is the
-/// keyframe set as last loaded/saved — the baseline [`Self::dirty`] compares
-/// against, so an author edit that undoes itself is clean again.
+/// An arena root's live tile schedule — the EVALUATION CACHE the board applier
+/// runs: the merged keyframes (all effective tile layers, bottom→top — see
+/// [`crate::layer::LayerStack::merged_tiles`]) plus the cells the schedule
+/// currently holds (with what they wore before, so the applier can revert
+/// exactly what it touched — and nothing else). Draft/published bookkeeping
+/// lives on [`crate::layer::ArenaStack`], not here.
 #[derive(Component, Default)]
 pub struct TileScript {
     pub keyframes: Vec<TileKeyframe>,
     pub applied: HashMap<(u8, u8), AppliedCell>,
-    pub saved: Vec<TileKeyframe>,
-}
-
-impl TileScript {
-    /// `true` while the keyframes differ from the last saved/loaded state —
-    /// unsaved author work the score sync must not destroy.
-    pub fn dirty(&self) -> bool {
-        self.keyframes != self.saved
-    }
 }
 
 /// The cells `selector` covers `ticks_in` ticks after its keyframe began.

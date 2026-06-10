@@ -1,18 +1,23 @@
-//! **Score sync** — files → world. Loads the newest versioned encounter files
-//! (`assets/encounters/<arena>/<difficulty>/boss.vNNNN.ron` / `tiles.vNNNN.ron`,
-//! see `arenic_game::encounter`) and keeps the running world on them:
+//! **Score sync** — files → world. Loads the newest published [`LayerStack`]
+//! (`assets/encounters/<arena>/<difficulty>/layers.vNNNN.ron`, with the legacy
+//! `boss.vNNNN.ron` + `tiles.vNNNN.ron` pair as a read-only fallback — see
+//! `arenic_game::layer::read_stack`) and keeps the running world on it:
 //!
-//! - The newest **boss score** folds into its arena's master timeline as a
-//!   [`Ghost`] on the arena's [`Boss`] root, so the boss replays its authored
-//!   take every cycle exactly like a hero ghost.
-//! - The newest **tile script** rides the arena root as a [`TileScript`];
+//! - Every effective **recording layer** folds into the arena's master
+//!   timeline ([`fold_stack`]) — the boss layer binds to the arena's [`Boss`]
+//!   root and replays as a [`Ghost`]; minion layers bind once ARE-44 lands.
+//! - The merged **tile schedule** ([`LayerStack::merged_tiles`], top layer
+//!   wins) rides the arena root as a [`TileScript`];
 //!   [`play_tile_scripts`] applies it to the board every tick.
+//! - The loaded stack itself rides the root as an [`ArenaStack`] — the author
+//!   tool edits its draft; this sync NEVER overwrites a dirty draft for the
+//!   active difficulty.
 //!
-//! The disk check re-runs at every cycle wrap (and on difficulty swaps), so the
-//! game and the author tool can run **in tandem**: commit a new version in the
-//! author, and the game picks it up when its cycle restarts; roll back by
-//! deleting the newest file. Filesystem access is native-only — the web build
-//! ships none of it (a baked manifest is future work).
+//! The disk check re-runs at every cycle wrap (and on difficulty swaps), so
+//! the game and the author tool run **in tandem**: publish a new stack in the
+//! author (`W`), and the game picks it up when its cycle restarts; roll back
+//! by deleting the newest file. Filesystem access is native-only — the web
+//! build ships none of it (a baked manifest is future work).
 
 use arenic_game::Difficulty;
 use arenic_game::arena::Arena;
@@ -27,39 +32,26 @@ use crate::states::AppState;
 #[cfg(not(target_arch = "wasm32"))]
 use arenic_game::Boss;
 #[cfg(not(target_arch = "wasm32"))]
-use arenic_game::encounter::{
-    ActiveDifficulty, BOSS_PREFIX, BossScoreFile, encounter_dir, latest_version, read_ron,
-};
+use arenic_game::encounter::{ActiveDifficulty, encounter_dir};
 #[cfg(not(target_arch = "wasm32"))]
 use arenic_game::grid::TileMover;
 #[cfg(not(target_arch = "wasm32"))]
-use arenic_game::tile_script::{TILES_PREFIX, TileScriptFile};
+use arenic_game::layer::{ArenaStack, LayerKind, LayerStack, fold_stack, read_stack};
 #[cfg(not(target_arch = "wasm32"))]
-use arenic_game::timeline::{ArenaTimeline, Ghost, RecordingLibrary, fold, restart, unfold};
+use arenic_game::timeline::{ArenaTimeline, Ghost, RecordingLibrary, restart, unfold};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::intro_scene::Selected;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::recording::{RecordingState, snap_arena_ghosts};
 
-/// The score versions currently folded into the world, keyed by arena index
-/// (`None` = no file). [`sync_scores`] diffs disk against this ledger; the
-/// author feature bumps it when it writes, so a fresh commit isn't immediately
-/// re-folded at the wrap.
+/// The stack version currently folded per arena (`None` = nothing published),
+/// tagged with the difficulty it was loaded FOR. [`sync_scores`] diffs disk
+/// against this ledger; the author's publish bumps it so a fresh `W` isn't
+/// immediately re-folded at the wrap.
 #[derive(Resource, Default)]
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub(crate) struct LoadedScores(pub(crate) HashMap<u8, ScoreVersions>);
-
-/// One arena's loaded `(boss, tiles)` file versions, each tagged with the
-/// difficulty it was loaded FOR — two difficulties can both sit at `v1`, so a
-/// bare version number could not tell "same file" from "same number on the
-/// other difficulty's timeline".
-#[derive(Clone, Copy, Default)]
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-pub(crate) struct ScoreVersions {
-    pub(crate) boss: Option<(Difficulty, u32)>,
-    pub(crate) tiles: Option<(Difficulty, u32)>,
-}
+pub(crate) struct LoadedScores(pub(crate) HashMap<u8, Option<(Difficulty, u32)>>);
 
 /// Re-entering the intro respawns every arena fresh, so the ledger must forget
 /// the previous session — a stale entry would skip the re-fold.
@@ -68,7 +60,7 @@ fn reset_loaded(mut loaded: ResMut<LoadedScores>) {
     loaded.0.clear();
 }
 
-/// Checks the disk for newer score versions and swaps them in. Runs cheaply:
+/// Checks the disk for a newer published stack and swaps it in. Runs cheaply:
 /// only on an arena's first sight, at its cycle wrap (`tick == 0`, unpaused —
 /// a countdown hold or modal freeze is not a wrap), or when the active
 /// difficulty changes (each difficulty owns its own timelines).
@@ -84,6 +76,7 @@ fn sync_scores(
         &mut ArenaClock,
         &mut ArenaTimeline,
         Option<&mut TileScript>,
+        Option<&ArenaStack>,
     )>,
     mut movers: ParamSet<(
         Query<
@@ -102,179 +95,199 @@ fn sync_scores(
     )>,
     mut board: TileBoard,
 ) {
-    for (arena_entity, arena_id, mut clock, mut timeline, tile_script) in &mut arenas {
+    for (arena_entity, arena_id, mut clock, mut timeline, tile_script, arena_stack) in &mut arenas {
         let index = arena_id.index() as u8;
         let fresh = !loaded.0.contains_key(&index);
         if !(fresh || difficulty.is_changed() || (clock.tick == 0 && !clock.paused)) {
             continue;
         }
-        let dir = encounter_dir(*arena_id, difficulty.0);
+        let ledger = *loaded.0.entry(index).or_default();
 
-        // --- Boss score: fold the newest version; unfold when rolled away ---
-        let latest = latest_version(&dir, BOSS_PREFIX);
-        let want = latest.as_ref().map(|&(v, _)| (difficulty.0, v));
+        // The author's unsaved draft for THIS difficulty is never the sync's
+        // to destroy — publish (`W`) re-baselines it and bumps the ledger.
+        // Orphan drafts left on another difficulty's stack lose the swap.
+        if arena_stack.is_some_and(|stack| stack.dirty())
+            && ledger.is_none_or(|(d, _)| d == difficulty.0)
+        {
+            warn!(
+                "{}: unsaved layer edits — press W to publish them",
+                arena_id.name()
+            );
+            continue;
+        }
+
+        let dir = encounter_dir(*arena_id, difficulty.0);
         let boss = {
             let p0 = movers.p0();
             p0.iter()
                 .find(|(_, child_of, ..)| child_of.parent() == arena_entity)
                 .map(|(entity, .., has_ghost, possessed)| (entity, has_ghost, possessed))
         };
-        let ledger_boss = loaded.0.entry(index).or_default().boss;
-        // Re-fold when the version moved — or when the ledger says a take is
-        // folded but the ghost is gone (a discarded re-record left the boss
-        // unfolded; the wrap puts the committed take back). The rescue stands
-        // down while the boss is possessed (`Selected`) or a recording is in
-        // flight: a break-out or a re-record's countdown unfolds the boss
-        // INTENTIONALLY, and folding the old take under the author would
-        // fight them for it. Releasing the boss (`B`) re-arms the rescue.
-        let rescue = |has_ghost: bool, possessed: bool| {
-            want.is_some() && !has_ghost && !possessed && matches!(*recording, RecordingState::Idle)
-        };
-        if let Some((boss, has_ghost, possessed)) = boss
-            && (ledger_boss != want || rescue(has_ghost, possessed))
-        {
-            // Parse + validate BEFORE touching the world. A same-difficulty
-            // newer version failing keeps the previous take playing (delete
-            // the bad file to roll back); another difficulty's take must NOT
-            // survive a swap, so a failed read there unfolds instead.
-            let incoming = match &latest {
-                Some((version, path)) => match read_ron::<BossScoreFile>(path)
-                    .and_then(|file| file.validate(*arena_id, difficulty.0).map(|()| file))
-                {
-                    Ok(file) => Some(Some((*version, path, file))),
-                    Err(err) => {
-                        warn!(
-                            "{}: unreadable boss score {}: {err}",
-                            arena_id.name(),
-                            path.display()
-                        );
-                        ledger_boss
-                            .is_some_and(|(d, _)| d != difficulty.0)
-                            .then_some(None)
-                    }
-                },
-                None => Some(None),
-            };
-            match incoming {
-                Some(Some((version, path, file))) => {
-                    let recording = file.recording();
-                    fold(&mut timeline, boss, &recording);
-                    restart(&mut clock, &mut timeline);
-                    // The arena's other ghosts rewind to their starts; the
-                    // boss's Ghost may be brand new (commands defer), so it
-                    // is posed by hand. Caching the take in the boss's
-                    // library makes `R → Replay previous` work after a
-                    // discard, exactly like a hero's staff.
-                    snap_arena_ghosts(arena_entity, &mut movers.p1(), Some(boss));
-                    if let Ok((_, _, mut mover, mut transform, mut library, _, _)) =
-                        movers.p0().get_mut(boss)
-                    {
-                        mover.snap_to(&mut transform, recording.start.x, recording.start.y);
-                        library.0.insert(*arena_id, recording.clone());
-                    }
-                    commands.entity(boss).insert(Ghost {
-                        start: recording.start,
-                    });
-                    loaded.0.entry(index).or_default().boss = Some((difficulty.0, version));
-                    info!(
-                        "{}: boss score v{version} folded ({})",
-                        arena_id.name(),
-                        path.display()
-                    );
-                }
-                Some(None) => {
-                    // No usable take for this difficulty — the boss returns to
-                    // a static piece, and its cached staff goes too ("Replay
-                    // previous" must never resurrect a take this difficulty
-                    // disowned).
-                    unfold(&mut timeline, boss, clock.tick);
-                    commands.entity(boss).remove::<Ghost>();
-                    restart(&mut clock, &mut timeline);
-                    snap_arena_ghosts(arena_entity, &mut movers.p1(), Some(boss));
-                    if let Ok((.., mut library, _, _)) = movers.p0().get_mut(boss) {
-                        library.0.remove(arena_id);
-                    }
-                    loaded.0.entry(index).or_default().boss = None;
-                    info!("{}: boss score removed — boss unfolded", arena_id.name());
-                }
-                None => {}
+
+        // Parse + validate BEFORE touching the world. A same-difficulty newer
+        // version failing keeps the previous stack playing (delete the bad
+        // file to roll back); another difficulty's stack must NOT survive a
+        // swap, so a failed read there unfolds instead.
+        let incoming = match read_stack(&dir, *arena_id, difficulty.0) {
+            Ok(Some((version, stack))) => Some(Some((version, stack))),
+            Ok(None) => Some(None),
+            Err(err) => {
+                warn!("{}: unreadable encounter stack: {err}", arena_id.name());
+                ledger
+                    .is_some_and(|(d, _)| d != difficulty.0)
+                    .then_some(None)
             }
+        };
+        let Some(swap) = incoming else {
+            continue;
+        };
+        let want = swap.as_ref().map(|(version, _)| (difficulty.0, *version));
+
+        // Re-fold when the version moved — or when the loaded stack has a
+        // boss layer but its ghost is gone (a discarded re-record left the
+        // boss unfolded; the wrap puts the committed take back). The rescue
+        // stands down while the boss is possessed (`Selected`) or a recording
+        // is in flight: a break-out or a re-record's countdown unfolds the
+        // boss INTENTIONALLY. Releasing the boss (`B`) re-arms it.
+        let stack_has_boss = arena_stack.is_some_and(|s| {
+            s.stack
+                .effective()
+                .any(|layer| matches!(layer.kind, LayerKind::Boss(_)))
+        });
+        let rescue = boss.is_some_and(|(_, has_ghost, possessed)| {
+            stack_has_boss && !has_ghost && !possessed && matches!(*recording, RecordingState::Idle)
+        });
+        if ledger == want && !rescue {
+            continue;
         }
 
-        // --- Tile script: swap in the newest version, reverting the old one ---
-        let latest = latest_version(&dir, TILES_PREFIX);
-        let want = latest.as_ref().map(|&(v, _)| (difficulty.0, v));
-        let ledger_tiles = loaded.0.entry(index).or_default().tiles;
-        if ledger_tiles != want {
-            // Unsaved editor keyframes for THIS difficulty are never the
-            // sync's to destroy — `W` saves them (the ledger stays put, so
-            // this re-checks afterwards). Orphan edits left on another
-            // difficulty's script lose the swap instead of leaking into the
-            // new difficulty's lineage.
-            if tile_script.as_ref().is_some_and(|script| script.dirty())
-                && ledger_tiles.is_none_or(|(d, _)| d == difficulty.0)
-            {
-                warn!(
-                    "{}: unsaved tile edits — press W to keep them",
-                    arena_id.name()
+        // --- Revert what the outgoing stack held -----------------------------
+        if let Some(mut script) = tile_script {
+            for (&(col, row), cell) in &script.applied {
+                board.set(index as usize, col as usize, row as usize, cell.prior);
+            }
+            script.applied.clear();
+            script.keyframes.clear();
+        }
+        if let Some((boss_entity, ..)) = boss {
+            unfold(&mut timeline, boss_entity, clock.tick);
+        }
+
+        match swap {
+            Some((version, stack)) => {
+                apply_stack(
+                    &mut commands,
+                    arena_entity,
+                    *arena_id,
+                    &stack,
+                    boss.map(|(entity, ..)| entity),
+                    &mut clock,
+                    &mut timeline,
+                    &mut movers,
                 );
-                continue;
+                commands
+                    .entity(arena_entity)
+                    .insert(ArenaStack::loaded(stack, version));
+                loaded.0.insert(index, Some((difficulty.0, version)));
+                info!("{}: encounter stack v{version} folded", arena_id.name());
             }
-            // Parse + validate BEFORE touching the live board. A corrupt
-            // same-difficulty newest version leaves the playing script (and
-            // the ledger) untouched, so deleting the bad file rolls back; a
-            // failed read across a difficulty swap removes instead.
-            let incoming = match &latest {
-                Some((version, path)) => match read_ron::<TileScriptFile>(path)
-                    .and_then(|file| file.validate(*arena_id, difficulty.0).map(|()| file))
-                {
-                    Ok(file) => Some(Some((*version, path, file))),
-                    Err(err) => {
-                        warn!(
-                            "{}: unreadable tile script {}: {err}",
-                            arena_id.name(),
-                            path.display()
-                        );
-                        ledger_tiles
-                            .is_some_and(|(d, _)| d != difficulty.0)
-                            .then_some(None)
+            None => {
+                // Nothing published — the boss returns to a static piece, and
+                // its cached staff goes too ("Replay previous" must never
+                // resurrect a take this difficulty disowned).
+                if let Some((boss_entity, ..)) = boss {
+                    commands.entity(boss_entity).remove::<Ghost>();
+                    if let Ok((.., mut library, _, _)) = movers.p0().get_mut(boss_entity) {
+                        library.0.remove(arena_id);
                     }
-                },
-                None => Some(None),
-            };
-            let Some(swap) = incoming else {
-                continue;
-            };
-            // Whatever the outgoing script held reverts to its pre-script kind.
-            if let Some(mut script) = tile_script {
-                for (&(col, row), cell) in &script.applied {
-                    board.set(index as usize, col as usize, row as usize, cell.prior);
                 }
-                script.applied.clear();
-                script.keyframes.clear();
+                restart(&mut clock, &mut timeline);
+                snap_arena_ghosts(
+                    arena_entity,
+                    &mut movers.p1(),
+                    boss.map(|(entity, ..)| entity),
+                );
+                commands
+                    .entity(arena_entity)
+                    .remove::<(TileScript, ArenaStack)>();
+                loaded.0.insert(index, None);
+                info!("{}: encounter stack removed — unfolded", arena_id.name());
             }
-            match swap {
-                Some((version, path, file)) => {
-                    let keyframes = file.keyframes;
-                    commands.entity(arena_entity).insert(TileScript {
-                        saved: keyframes.clone(),
-                        keyframes,
-                        applied: default(),
-                    });
-                    loaded.0.entry(index).or_default().tiles = Some((difficulty.0, version));
-                    info!(
-                        "{}: tile script v{version} loaded ({})",
-                        arena_id.name(),
-                        path.display()
-                    );
+        }
+    }
+}
+
+/// Folds `stack` into the world: recording layers bind (boss layer → the
+/// arena's boss root; minion layers skip until ARE-44 spawns them), the
+/// merged tile schedule becomes the live [`TileScript`], and the arena
+/// restarts so playback begins at tick 0.
+#[cfg(not(target_arch = "wasm32"))]
+fn apply_stack(
+    commands: &mut Commands,
+    arena_entity: Entity,
+    arena_id: Arena,
+    stack: &LayerStack,
+    boss: Option<Entity>,
+    clock: &mut ArenaClock,
+    timeline: &mut ArenaTimeline,
+    movers: &mut ParamSet<(
+        Query<
+            (
+                Entity,
+                &ChildOf,
+                &mut TileMover,
+                &mut Transform,
+                &mut RecordingLibrary,
+                Has<Ghost>,
+                Has<Selected>,
+            ),
+            With<Boss>,
+        >,
+        Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
+    )>,
+) {
+    // Bind the FIRST effective boss layer to the arena's boss root.
+    let boss_layer = stack.effective().find_map(|layer| match &layer.kind {
+        LayerKind::Boss(recording) => Some((layer.id, recording.clone())),
+        _ => None,
+    });
+    let bindings: Vec<_> = match (boss, &boss_layer) {
+        (Some(entity), Some((id, _))) => vec![(*id, entity)],
+        _ => Vec::new(),
+    };
+    fold_stack(stack, &bindings, timeline);
+    restart(clock, timeline);
+    snap_arena_ghosts(arena_entity, &mut movers.p1(), boss);
+
+    if let Some(boss_entity) = boss {
+        match boss_layer {
+            Some((_, recording)) => {
+                // The boss's Ghost may be brand new (commands defer), so it is
+                // posed by hand; caching the take makes `R → Replay previous`
+                // work after a discard, exactly like a hero's staff.
+                if let Ok((_, _, mut mover, mut transform, mut library, _, _)) =
+                    movers.p0().get_mut(boss_entity)
+                {
+                    mover.snap_to(&mut transform, recording.start.x, recording.start.y);
+                    library.0.insert(arena_id, recording.clone());
                 }
-                None => {
-                    commands.entity(arena_entity).remove::<TileScript>();
-                    loaded.0.entry(index).or_default().tiles = None;
+                commands.entity(boss_entity).insert(Ghost {
+                    start: recording.start,
+                });
+            }
+            None => {
+                commands.entity(boss_entity).remove::<Ghost>();
+                if let Ok((.., mut library, _, _)) = movers.p0().get_mut(boss_entity) {
+                    library.0.remove(&arena_id);
                 }
             }
         }
     }
+
+    commands.entity(arena_entity).insert(TileScript {
+        keyframes: stack.merged_tiles(),
+        applied: default(),
+    });
 }
 
 /// Applies every arena's [`TileScript`] to the board at its clock's tick: the
@@ -319,7 +332,7 @@ fn play_tile_scripts(
     }
 }
 
-/// File → world sync for the versioned encounter scores, plus tile-script
+/// File → world sync for the published layer stacks, plus tile-schedule
 /// playback. Native loads from disk; on wasm only the (inert) playback systems
 /// ship.
 pub(crate) struct ScoreSyncPlugin;

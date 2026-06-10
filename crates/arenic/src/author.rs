@@ -1,41 +1,41 @@
 //! **Author mode** (`just author` — the `author` cargo feature; never in a
-//! shipping build). The in-game tooling for choreographing boss encounters:
+//! shipping build). The in-game tooling for choreographing LAYERED encounters
+//! (`_docs/AUTHORING_UI.md`):
 //!
 //! - **`B`** possesses / releases the current arena's [`Boss`]: `Selected`
 //!   moves onto the boss root, and from there the ENTIRE hero flow applies
 //!   unchanged — arrows step it, `1`-`4` cast its phase-loadout slots
 //!   ([`boss_cast_slots`] live-casts exactly what playback will resolve),
-//!   `R` records its 2-minute staff, Commit folds it back in as a ghost. The
-//!   one extra step is here: a committed boss staff is mirrored to a versioned
-//!   `assets/encounters/<arena>/<difficulty>/boss.vNNNN.ron` score file.
+//!   `R` records its 2-minute staff, Commit folds it back in as a ghost AND
+//!   stages the take into the arena's DRAFT [`ArenaStack`] boss layer.
+//! - **`W`** PUBLISHES the focused arena's whole draft stack as the next
+//!   versioned `assets/encounters/<arena>/<difficulty>/layers.vNNNN.ron` —
+//!   the atomic unit the game folds at every cycle wrap.
 //! - **`D`** cycles the [`ActiveDifficulty`] — each difficulty owns its own
-//!   timelines, so this re-points every arena at that difficulty's files.
+//!   stack; a dirty draft blocks the swap until published.
 //! - **`T`** opens the tile editor on the current arena (its clock pauses and
 //!   the world keys yield): arrows steer the cell cursor, **`,` / `.`** scrub
 //!   the timeline ±1s (Shift: ±10s) with ghosts re-derived at the scrubbed
 //!   tick, **`I` / `O`** set the in/out marks, **Space** toggles a lava
-//!   keyframe on the cursor's cell over `[in, out)`, and **`W`** writes the
-//!   arena's script to a versioned `tiles.vNNNN.ron`.
+//!   keyframe on the cursor's cell over `[in, out)` in the SELECTED tile
+//!   layer (**`Tab`** cycles tile layers, **`N`** adds one on top — the top
+//!   layer wins overlapping cells).
 //! - **`F5`** restarts the current arena for a fresh watch-through.
 //!
-//! Rolling back is filesystem-native: delete the newest `vNNNN` file(s) and the
-//! game re-reads the survivor at the next cycle wrap (the files are committed
-//! to git, so history is the second level of undo).
+//! Rolling back is filesystem-native: delete the newest `layers.vNNNN.ron`
+//! and the game re-reads the survivor at the next cycle wrap (the files are
+//! committed to git, so history is the second level of undo).
 
 use arenic_game::Boss;
 use arenic_game::ability::{AbilityMeshes, AbilitySfx, cast};
 use arenic_game::arena::Arena;
 use arenic_game::audio::AudioMix;
 use arenic_game::default_font::MonoFont;
-use arenic_game::encounter::{
-    ActiveDifficulty, BOSS_PREFIX, BossScoreFile, Difficulty, SCORE_FORMAT, encounter_dir,
-    resolve_ability, write_versioned_ron,
-};
+use arenic_game::encounter::{ActiveDifficulty, encounter_dir, resolve_ability};
 use arenic_game::grid::{MAX_COL, MAX_ROW, TileMover, arrow_delta, arrow_pressed, tile_to_world};
+use arenic_game::layer::{ArenaStack, Layer, LayerId, LayerKind, write_stack};
 use arenic_game::tile::TileKind;
-use arenic_game::tile_script::{
-    TILES_PREFIX, TileKeyframe, TileScript, TileScriptFile, TileSelector,
-};
+use arenic_game::tile_script::{TileKeyframe, TileScript, TileSelector};
 use arenic_game::timeline::{
     Action, ArenaClock, ArenaTimeline, CYCLE_TICKS, Ghost, TICKS_PER_SECOND, TimelineEvent,
     restart, seek_window,
@@ -65,6 +65,10 @@ struct TileEditor {
     /// New keyframes span `[mark_in, mark_out)` ticks.
     mark_in: u32,
     mark_out: u32,
+    /// The tile LAYER paints land in (`Tab` cycles, `N` creates). `None`
+    /// falls back to the topmost tile layer, creating "Tiles 1" on first
+    /// paint.
+    selected_layer: Option<LayerId>,
 }
 
 impl Default for TileEditor {
@@ -73,6 +77,7 @@ impl Default for TileEditor {
             cursor: IVec2::new(33, 15),
             mark_in: 0,
             mark_out: CYCLE_TICKS,
+            selected_layer: None,
         }
     }
 }
@@ -91,6 +96,12 @@ struct AuthorHud;
 /// [`not_tile_editing`]).
 fn tile_editing(mode: Option<Res<TileEditMode>>) -> bool {
     mode.is_some()
+}
+
+/// `true` when any arena's stack changed this frame — re-renders the HUD chip
+/// after commits, paints, publishes, and sync swaps.
+fn stacks_changed(stacks: Query<(), Changed<ArenaStack>>) -> bool {
+    !stacks.is_empty()
 }
 
 /// `B` — possess the current arena's boss, or release a possessed one back to
@@ -124,16 +135,16 @@ fn possess_boss(
 }
 
 /// `D` — cycle the authoring difficulty. `score_sync` notices the change and
-/// re-points every arena at that difficulty's score files — which would
-/// clobber unsaved tile keyframes, so a dirty script blocks the swap until
-/// it's saved (`W`).
+/// re-points every arena at that difficulty's stack — which would clobber
+/// unsaved layer edits, so a dirty draft blocks the swap until it's published
+/// (`W`).
 fn cycle_difficulty(
     mut difficulty: ResMut<ActiveDifficulty>,
-    scripts: Query<(&Arena, &TileScript)>,
+    stacks: Query<(&Arena, &ArenaStack)>,
 ) {
-    if let Some((arena, _)) = scripts.iter().find(|(_, script)| script.dirty()) {
+    if let Some((arena, _)) = stacks.iter().find(|(_, stack)| stack.dirty()) {
         warn!(
-            "{}: unsaved tile edits — press W before switching difficulty",
+            "{}: unsaved layer edits — press W to publish before switching difficulty",
             arena.name()
         );
         return;
@@ -197,32 +208,64 @@ fn boss_cast_slots(
     Ok(())
 }
 
-/// Mirrors a committed BOSS staff to the next versioned score file (hero
-/// commits stay session-local, exactly as in the plain game). Bumps the
-/// loaded-version ledger so the wrap-check doesn't re-fold what's already
-/// playing.
-fn mirror_boss_commits(
+/// Stages a committed BOSS staff into its arena's DRAFT stack (hero commits
+/// stay session-local, exactly as in the plain game). Nothing touches disk
+/// here — the world already previews the take (the commit folded it live);
+/// `W` publishes the whole stack.
+fn commit_to_layer(
+    mut commands: Commands,
     mut commits: MessageReader<RecordingCommitted>,
-    bosses: Query<(), With<Boss>>,
-    mut loaded: ResMut<LoadedScores>,
+    difficulty: Res<ActiveDifficulty>,
+    bosses: Query<&ChildOf, With<Boss>>,
+    mut stacks: Query<&mut ArenaStack>,
 ) {
     for commit in commits.read() {
-        if bosses.get(commit.entity).is_err() {
+        let Ok(child_of) = bosses.get(commit.entity) else {
+            continue;
+        };
+        if commit.difficulty != difficulty.0 {
+            // Stale commit from before a difficulty swap — never stage it
+            // into another difficulty's draft.
+            warn!(
+                "{}: dropping a {:?} take staged after swapping to {:?}",
+                commit.arena.name(),
+                commit.difficulty,
+                difficulty.0
+            );
             continue;
         }
-        let (arena, difficulty) = (commit.arena, commit.difficulty);
-        let file = BossScoreFile::from_recording(arena, difficulty, &commit.recording);
-        match write_versioned_ron(&encounter_dir(arena, difficulty), BOSS_PREFIX, &file) {
-            Ok((version, path)) => {
-                loaded.0.entry(arena.index() as u8).or_default().boss = Some((difficulty, version));
-                info!(
-                    "{}: boss score v{version} written ({})",
-                    arena.name(),
-                    path.display()
-                );
+        let arena_entity = child_of.parent();
+        if let Ok(mut arena_stack) = stacks.get_mut(arena_entity) {
+            let boss_layer = arena_stack
+                .stack
+                .layers
+                .iter_mut()
+                .find(|layer| matches!(layer.kind, LayerKind::Boss(_)));
+            match boss_layer {
+                Some(layer) => layer.kind = LayerKind::Boss(commit.recording.clone()),
+                None => {
+                    let id = arena_stack.stack.next_id();
+                    arena_stack.stack.layers.push(Layer::new(
+                        id,
+                        "Boss",
+                        LayerKind::Boss(commit.recording.clone()),
+                    ));
+                }
             }
-            Err(err) => warn!("{}: boss score write FAILED: {err}", arena.name()),
+        } else {
+            // First take on a never-published arena: a fresh draft stack.
+            let mut arena_stack = ArenaStack::default();
+            arena_stack.stack.layers.push(Layer::new(
+                LayerId(0),
+                "Boss",
+                LayerKind::Boss(commit.recording.clone()),
+            ));
+            commands.entity(arena_entity).insert(arena_stack);
         }
+        info!(
+            "{}: boss take staged in the draft — W publishes the stack",
+            commit.arena.name()
+        );
     }
 }
 
@@ -375,13 +418,18 @@ fn set_marks(
 /// board preview updates on the next fixed tick either way.
 fn paint(
     mut commands: Commands,
-    editor: Res<TileEditor>,
+    mut editor: ResMut<TileEditor>,
     current: Res<CurrentArena>,
-    mut arenas: Query<(Entity, &Arena, Option<&mut TileScript>)>,
+    mut arenas: Query<(
+        Entity,
+        &Arena,
+        Option<&mut ArenaStack>,
+        Option<&mut TileScript>,
+    )>,
 ) {
-    let Some((arena_entity, _, script)) = arenas
+    let Some((arena_entity, _, arena_stack, script)) = arenas
         .iter_mut()
-        .find(|(_, arena, _)| arena.index() == current.0)
+        .find(|(_, arena, ..)| arena.index() == current.0)
     else {
         return;
     };
@@ -395,55 +443,185 @@ fn paint(
         selector,
         kind: TileKind::Lava,
     };
-    match script {
-        Some(mut script) => {
-            let before = script.keyframes.len();
-            script.keyframes.retain(|k| k.selector != selector);
-            if script.keyframes.len() == before {
-                script.keyframes.push(keyframe);
-            }
+
+    // Paint lands in the SELECTED tile layer of the DRAFT stack — falling
+    // back to the topmost tile layer, creating "Tiles 1" on first paint.
+    let created = arena_stack.is_none();
+    let mut fresh_stack;
+    let stack = match arena_stack {
+        Some(stack) => stack.into_inner(),
+        None => {
+            fresh_stack = ArenaStack::default();
+            &mut fresh_stack
         }
+    };
+    let target = editor
+        .selected_layer
+        .filter(|&id| {
+            stack
+                .stack
+                .layer(id)
+                .is_some_and(|layer| matches!(layer.kind, LayerKind::Tiles(_)))
+        })
+        .or_else(|| {
+            stack
+                .stack
+                .layers
+                .iter()
+                .rev()
+                .find(|layer| matches!(layer.kind, LayerKind::Tiles(_)))
+                .map(|layer| layer.id)
+        });
+    let target = match target {
+        Some(id) => id,
+        None => {
+            let id = stack.stack.next_id();
+            stack
+                .stack
+                .layers
+                .push(Layer::new(id, "Tiles 1", LayerKind::Tiles(Vec::new())));
+            id
+        }
+    };
+    editor.selected_layer = Some(target);
+    if let Some(layer) = stack.stack.layer_mut(target)
+        && let LayerKind::Tiles(keyframes) = &mut layer.kind
+    {
+        let before = keyframes.len();
+        keyframes.retain(|k| k.selector != selector);
+        if keyframes.len() == before {
+            keyframes.push(keyframe);
+        }
+    }
+
+    // Regenerate the live evaluation cache from the whole stack.
+    let merged = stack.stack.merged_tiles();
+    match script {
+        Some(mut script) => script.keyframes = merged,
         None => {
             commands.entity(arena_entity).insert(TileScript {
-                keyframes: vec![keyframe],
+                keyframes: merged,
                 applied: default(),
-                saved: default(),
             });
         }
     }
+    // A never-stacked arena gets its fresh draft attached.
+    if created {
+        commands.entity(arena_entity).insert(stack.clone());
+    }
 }
 
-/// `W` — write the current arena's tile script as the next versioned
-/// `tiles.vNNNN.ron` and bump the ledger.
-fn write_tiles(
+/// `W` — PUBLISH the focused arena's whole draft stack as the next versioned
+/// `layers.vNNNN.ron`, re-baseline the draft, and bump the ledger so the
+/// wrap-check doesn't re-fold what's already playing.
+fn publish_stack(
     current: Res<CurrentArena>,
     difficulty: Res<ActiveDifficulty>,
     mut loaded: ResMut<LoadedScores>,
-    mut arenas: Query<(&Arena, &mut TileScript)>,
+    mut arenas: Query<(&Arena, &mut ArenaStack)>,
 ) {
-    let Some((arena, mut script)) = arenas
+    let Some((arena, mut stack)) = arenas
         .iter_mut()
         .find(|(arena, _)| arena.index() == current.0)
     else {
         return;
     };
-    let file = TileScriptFile {
-        format: SCORE_FORMAT,
-        arena: arena.index() as u8,
-        difficulty: difficulty.0,
-        keyframes: script.keyframes.clone(),
-    };
-    match write_versioned_ron(&encounter_dir(*arena, difficulty.0), TILES_PREFIX, &file) {
+    match write_stack(
+        &encounter_dir(*arena, difficulty.0),
+        *arena,
+        difficulty.0,
+        &stack.stack,
+    ) {
         Ok((version, path)) => {
-            script.saved = script.keyframes.clone();
-            loaded.0.entry(arena.index() as u8).or_default().tiles = Some((difficulty.0, version));
+            stack.mark_published(version);
+            loaded
+                .0
+                .insert(arena.index() as u8, Some((difficulty.0, version)));
             info!(
-                "{}: tile script v{version} written ({})",
+                "{}: stack v{version} published ({})",
                 arena.name(),
                 path.display()
             );
         }
-        Err(err) => warn!("{}: tile script write FAILED: {err}", arena.name()),
+        Err(err) => warn!("{}: stack publish FAILED: {err}", arena.name()),
+    }
+}
+
+/// Tab (tile mode) — cycle the paint-target among the stack's tile layers.
+fn cycle_tile_layer(
+    mut editor: ResMut<TileEditor>,
+    current: Res<CurrentArena>,
+    arenas: Query<(&Arena, &ArenaStack)>,
+) {
+    let Some((arena, stack)) = arenas.iter().find(|(arena, _)| arena.index() == current.0) else {
+        return;
+    };
+    let tiles: Vec<LayerId> = stack
+        .stack
+        .layers
+        .iter()
+        .filter(|layer| matches!(layer.kind, LayerKind::Tiles(_)))
+        .map(|layer| layer.id)
+        .collect();
+    if tiles.is_empty() {
+        return;
+    }
+    let next = match editor
+        .selected_layer
+        .and_then(|id| tiles.iter().position(|&t| t == id))
+    {
+        Some(at) => tiles[at.strict_add(1) % tiles.len()],
+        None => tiles[0],
+    };
+    editor.selected_layer = Some(next);
+    let name = stack
+        .stack
+        .layer(next)
+        .map(|layer| layer.name.as_str())
+        .unwrap_or("?");
+    info!("{}: painting into layer \"{name}\"", arena.name());
+}
+
+/// `N` (tile mode) — add a fresh tile layer on TOP of the stack (it wins
+/// conflicts) and select it for painting.
+fn new_tile_layer(
+    mut commands: Commands,
+    mut editor: ResMut<TileEditor>,
+    current: Res<CurrentArena>,
+    mut arenas: Query<(Entity, &Arena, Option<&mut ArenaStack>)>,
+) {
+    let Some((arena_entity, arena, arena_stack)) = arenas
+        .iter_mut()
+        .find(|(_, arena, _)| arena.index() == current.0)
+    else {
+        return;
+    };
+    let created = arena_stack.is_none();
+    let mut fresh_stack;
+    let stack = match arena_stack {
+        Some(stack) => stack.into_inner(),
+        None => {
+            fresh_stack = ArenaStack::default();
+            &mut fresh_stack
+        }
+    };
+    let ordinal = stack
+        .stack
+        .layers
+        .iter()
+        .filter(|layer| matches!(layer.kind, LayerKind::Tiles(_)))
+        .count()
+        .strict_add(1);
+    let id = stack.stack.next_id();
+    stack.stack.layers.push(Layer::new(
+        id,
+        format!("Tiles {ordinal}"),
+        LayerKind::Tiles(Vec::new()),
+    ));
+    editor.selected_layer = Some(id);
+    info!("{}: new tile layer \"Tiles {ordinal}\"", arena.name());
+    if created {
+        commands.entity(arena_entity).insert(stack.clone());
     }
 }
 
@@ -499,29 +677,52 @@ fn setup_author_hud(mut commands: Commands, mono: Res<MonoFont>, current: Res<Cu
 fn update_author_hud(
     current: Res<CurrentArena>,
     difficulty: Res<ActiveDifficulty>,
-    loaded: Res<LoadedScores>,
     editing: Option<Res<TileEditMode>>,
     editor: Res<TileEditor>,
+    stacks: Query<(&Arena, &ArenaStack)>,
     hud: Single<(&mut Text, &mut TextColor), With<AuthorHud>>,
 ) {
     let arena =
         Arena::from_index(current.0).expect("invariant: CurrentArena is a valid arena index");
-    let versions = loaded
-        .0
-        .get(&(current.0 as u8))
-        .copied()
-        .unwrap_or_default();
-    let v = |v: Option<(Difficulty, u32)>| v.map_or("--".to_string(), |(_, v)| format!("v{v}"));
+    let stack = stacks
+        .iter()
+        .find(|(a, _)| a.index() == current.0)
+        .map(|(_, stack)| stack);
+    let summary = match stack {
+        Some(stack) => {
+            let version = stack
+                .version
+                .map_or("draft".to_string(), |v| format!("v{v}"));
+            let dirty = stack
+                .stack
+                .layers
+                .iter()
+                .chain(&stack.published.layers)
+                .map(|layer| layer.id)
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .filter(|&id| stack.layer_dirty(id))
+                .count();
+            let mut s = format!("stack {version} · {} layers", stack.stack.layers.len());
+            if dirty > 0 {
+                s.push_str(&format!(" ({dirty} dirty)"));
+            }
+            s
+        }
+        None => "no stack".to_string(),
+    };
     let mut line = format!(
-        "AUTHOR · {} · {} · boss {} · tiles {}",
+        "AUTHOR · {} · {} · {summary}",
         difficulty.0.slug().to_uppercase(),
         arena.slug(),
-        v(versions.boss),
-        v(versions.tiles),
     );
     if editing.is_some() {
+        let layer_name = editor
+            .selected_layer
+            .and_then(|id| stack.and_then(|s| s.stack.layer(id)))
+            .map_or("—", |layer| layer.name.as_str());
         line.push_str(&format!(
-            " · TILE ({},{}) [{}→{}]",
+            " · TILE ({},{}) [{}→{}] → {layer_name}",
             editor.cursor.x,
             editor.cursor.y,
             fmt_tick(editor.mark_in),
@@ -585,7 +786,11 @@ impl Plugin for AuthorPlugin {
                             .and(no_pending_walk)
                             .and(not_tile_editing),
                     ),
-                    mirror_boss_commits.run_if(on_message::<RecordingCommitted>),
+                    commit_to_layer.run_if(on_message::<RecordingCommitted>),
+                    // `W` publishes the focused arena's whole stack — from
+                    // anywhere in author mode, tile editor open or not.
+                    publish_stack
+                        .run_if(input_just_pressed(KeyCode::KeyW).and(no_modal).and(is_idle)),
                     toggle_tile_mode.run_if(
                         input_just_pressed(KeyCode::KeyT)
                             .and(no_modal)
@@ -611,7 +816,8 @@ impl Plugin for AuthorPlugin {
                             input_just_pressed(KeyCode::KeyI).or(input_just_pressed(KeyCode::KeyO)),
                         ),
                         paint.run_if(input_just_pressed(KeyCode::Space)),
-                        write_tiles.run_if(input_just_pressed(KeyCode::KeyW)),
+                        cycle_tile_layer.run_if(input_just_pressed(KeyCode::Tab)),
+                        new_tile_layer.run_if(input_just_pressed(KeyCode::KeyN)),
                     )
                         .run_if(tile_editing.and(no_modal)),
                     // The chip re-renders only when one of its inputs moved —
@@ -619,10 +825,10 @@ impl Plugin for AuthorPlugin {
                     update_author_hud.run_if(
                         resource_changed::<CurrentArena>
                             .or(resource_changed::<ActiveDifficulty>)
-                            .or(resource_changed::<LoadedScores>)
                             .or(resource_changed::<TileEditor>)
                             .or(resource_added::<TileEditMode>)
-                            .or(resource_removed::<TileEditMode>),
+                            .or(resource_removed::<TileEditMode>)
+                            .or(stacks_changed),
                     ),
                 )
                     .run_if(in_state(AppState::Intro)),

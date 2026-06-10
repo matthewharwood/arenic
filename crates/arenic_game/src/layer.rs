@@ -38,7 +38,7 @@ pub const LAYERS_FORMAT: u32 = 2;
 
 /// A layer's stable identity within its stack (and its file). Never reused
 /// within a stack; allocate with [`LayerStack::next_id`].
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct LayerId(pub u32);
 
 /// What a minion looks like / how it behaves — grows per enemy design.
@@ -52,7 +52,7 @@ pub enum MinionArchetype {
 /// ticks are ABSOLUTE cycle ticks (captured live against the arena clock,
 /// same as the boss) — `spawn_tick..despawn_tick` is only the visibility
 /// window the folder drives.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct MinionLayer {
     pub archetype: MinionArchetype,
     pub spawn_tick: u32,
@@ -62,7 +62,7 @@ pub struct MinionLayer {
 }
 
 /// One layer's content.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum LayerKind {
     /// The boss staff (one per stack by convention, not by type).
     Boss(Recording),
@@ -158,6 +158,59 @@ impl LayerStack {
             LayerKind::Minion(minion) => Some((layer.id, &minion.recording)),
             LayerKind::Tiles(_) => None,
         })
+    }
+}
+
+/// An arena root's live stack: `stack` is what the world folds and the author
+/// edits (the DRAFT in author builds); `published` is the baseline it diffs
+/// against (== `stack` in plain-game builds, refreshed on every load). The
+/// score sync inserts/refreshes this; the author's `W` publishes `stack` and
+/// re-baselines.
+#[derive(Component, Clone, Default)]
+pub struct ArenaStack {
+    pub stack: LayerStack,
+    pub published: LayerStack,
+    pub version: Option<u32>,
+}
+
+impl ArenaStack {
+    /// A freshly-loaded stack: draft == published baseline.
+    pub fn loaded(stack: LayerStack, version: u32) -> Self {
+        Self {
+            published: stack.clone(),
+            stack,
+            version: Some(version),
+        }
+    }
+
+    /// `true` while `layer` differs from its published baseline (persisted
+    /// fields only — `solo`/`locked` are session UI state).
+    pub fn layer_dirty(&self, id: LayerId) -> bool {
+        let persisted = |layer: &Layer| (layer.name.clone(), layer.muted, layer.kind.clone());
+        match (self.stack.layer(id), self.published.layer(id)) {
+            (Some(draft), Some(baseline)) => persisted(draft) != persisted(baseline),
+            (None, None) => false,
+            _ => true,
+        }
+    }
+
+    /// `true` while ANY layer differs from the published baseline — unsaved
+    /// author work the score sync must never destroy.
+    pub fn dirty(&self) -> bool {
+        let ids: std::collections::BTreeSet<u32> = self
+            .stack
+            .layers
+            .iter()
+            .chain(&self.published.layers)
+            .map(|layer| layer.id.0)
+            .collect();
+        ids.into_iter().any(|id| self.layer_dirty(LayerId(id)))
+    }
+
+    /// Publishes the draft: baseline = draft, version = the new file version.
+    pub fn mark_published(&mut self, version: u32) {
+        self.published = self.stack.clone();
+        self.version = Some(version);
     }
 }
 

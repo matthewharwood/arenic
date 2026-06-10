@@ -55,7 +55,7 @@ pub enum Action {
 /// One character's committed staff for one arena: the tile it stood on at tick 0
 /// (`start` — every cycle replays from there) plus its tick-sorted events. A
 /// partial commit is simply a shorter event list; the ghost plays it, then idles.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Recording {
     pub start: IVec2,
     pub events: Arc<[TimelineEvent]>,

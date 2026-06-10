@@ -37,7 +37,7 @@ pub use audio::{AudioMix, DesiredMusic, GameAudioPlugin, MusicTarget};
 pub use boss::Boss;
 pub use encounter::{ActiveDifficulty, Difficulty};
 pub use interaction::{InteractionPlugin, Interactive, UiFocus, hidden_outline};
-pub use layer::{Layer, LayerId, LayerKind, LayerStack};
+pub use layer::{ArenaStack, Layer, LayerId, LayerKind, LayerStack};
 
 use bevy::app::PluginGroupBuilder;
 use bevy::asset::AssetMetaCheck;
