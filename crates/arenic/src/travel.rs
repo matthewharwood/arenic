@@ -235,9 +235,8 @@ fn perform_pending_walk(
     commands.remove_resource::<PendingWalk>();
     let (hero, mut mover, mut transform, child_of, library) = selected.into_inner();
     let (_, arena) = arena_roots.get(child_of.parent())?;
-    let Some(entry) = adjacent_entry(arena.index(), mover.col, mover.row, delta) else {
-        return Ok(());
-    };
+    let entry = adjacent_entry(arena.index(), mover.col, mover.row, delta)
+        .ok_or("invariant: PendingWalk held a step that no longer crosses an arena edge")?;
     edge_walk(
         &mut commands,
         &mut latch,

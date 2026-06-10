@@ -88,6 +88,7 @@ pub(crate) struct CurrentArena(pub(crate) usize);
 /// On the camera while it frames the whole overworld (gates the overworld gizmos).
 /// `pub(crate)` so the HUD knows whether to theme to an arena or the overworld.
 #[derive(Component)]
+#[component(immutable)]
 pub(crate) struct ZoomOut;
 
 /// A guildmaster puck's index in the Guild House — `Tab` cycles selection by it.
@@ -101,10 +102,12 @@ pub(crate) struct Puck(pub(crate) usize);
 /// wears the selection ring. Exactly one puck has this at a time — recording
 /// systems query it dynamically (RULEBOOK → Selected Character Query Pattern).
 #[derive(Component)]
+#[component(immutable)]
 pub(crate) struct Selected;
 
 /// The glowing selection halo; [`follow_selected`] parks it on the selected puck.
 #[derive(Component)]
+#[component(immutable)]
 struct SelectionRing;
 
 /// A boss's glowing inner core: its signature [`LightBehavior`], rest transform, and

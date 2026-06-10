@@ -72,10 +72,12 @@ impl Default for TileEditor {
 
 /// The glowing cell-cursor ring the tile editor steers.
 #[derive(Component)]
+#[component(immutable)]
 struct TileCursor;
 
 /// The author HUD chip's text node.
 #[derive(Component)]
+#[component(immutable)]
 struct AuthorHud;
 
 /// `true` while the tile editor is open (the author-side counterpart of
@@ -440,9 +442,8 @@ fn update_author_hud(
     editor: Res<TileEditor>,
     hud: Single<(&mut Text, &mut TextColor), With<AuthorHud>>,
 ) {
-    let Some(arena) = Arena::from_index(current.0) else {
-        return;
-    };
+    let arena =
+        Arena::from_index(current.0).expect("invariant: CurrentArena is a valid arena index");
     let versions = loaded
         .0
         .get(&(current.0 as u8))

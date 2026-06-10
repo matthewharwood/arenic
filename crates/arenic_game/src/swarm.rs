@@ -81,7 +81,7 @@ const SWARM_RING_Y: f32 = 3.4;
 const SWARM_Z: f32 = -1.4;
 const SWARM_AMP: Vec3 = Vec3::new(1.4, 1.0, 0.9);
 /// Global slow factor on swarm time — keeps the drift calm and non-distracting.
-pub const SWARM_TIME_SCALE: f32 = 0.5;
+const SWARM_TIME_SCALE: f32 = 0.5;
 /// Compile-time invariant: the swarm's highest reach (`SWARM_Z + SWARM_AMP.z = -0.5`)
 /// stays well below every floor plane (game `z = 0`, storybook `z = -0.02`), so the
 /// swarm goes *around and under* the ground, never *through* it.

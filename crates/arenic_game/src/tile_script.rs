@@ -116,7 +116,7 @@ pub fn cells_at(selector: &TileSelector, ticks_in: u32) -> Vec<(u8, u8)> {
             thickness,
         } => {
             let t = ticks_in as f32 / TICKS_PER_SECOND as f32;
-            let mid = (GRID_H - 1) as f32 * 0.5;
+            let mid = GRID_H.strict_sub(1) as f32 * 0.5;
             // Guard the division; a zero wavelength means "no horizontal variation".
             let freq = if wavelength.abs() > f32::EPSILON {
                 1.0 / wavelength
