@@ -115,11 +115,7 @@ const EASE_CYCLE: [EaseKind; 8] = [
     EaseKind::Hold,
 ];
 
-fn track_mut<'a>(
-    stack: &'a mut ArenaStack,
-    layer: LayerId,
-    kind: EffectKind,
-) -> Option<&'a mut EffectTrack> {
+fn track_mut(stack: &mut ArenaStack, layer: LayerId, kind: EffectKind) -> Option<&mut EffectTrack> {
     stack
         .stack
         .layer_mut(layer)?
@@ -397,7 +393,7 @@ fn edit_keys(
     }
 
     // --- Ease ops ------------------------------------------------------------
-    let mut set_ease = |stack: &mut ArenaStack, ease: EaseKind| {
+    let set_ease = |stack: &mut ArenaStack, ease: EaseKind| {
         for key in &selection.keys {
             if let Some(track) = track_mut(stack, key.layer, key.kind)
                 && let Some(found) = track.keys.iter_mut().find(|k| k.tick == key.tick)
@@ -579,9 +575,8 @@ fn modal_op(
                 return;
             }
             if let Some(c) = digit {
-                if c == '-' && digits.is_empty() {
-                    digits.push(c);
-                } else if c != '-' {
+                // A sign is only legal as the first character.
+                if c != '-' || digits.is_empty() {
                     digits.push(c);
                 }
                 *delta = digits.parse().unwrap_or(*delta);

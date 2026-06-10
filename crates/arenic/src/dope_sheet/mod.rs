@@ -736,7 +736,7 @@ fn view_keys(
         .iter()
         .find(|(a, _)| a.index() == current.0)
         .map_or(0.0, |(_, clock)| clock.tick as f32);
-    let mut zoom_at_playhead = |view: &mut SheetView, factor: f32| {
+    let zoom_at_playhead = |view: &mut SheetView, factor: f32| {
         let px = view.px_of(playhead as u32).clamp(0.0, KEY_W);
         view.ticks_per_px *= factor;
         view.clamp();
