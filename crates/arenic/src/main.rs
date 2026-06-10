@@ -9,6 +9,8 @@ mod entity_browser;
 mod hud;
 mod intro_scene;
 mod modal;
+#[cfg(all(feature = "author", not(target_arch = "wasm32")))]
+mod popout;
 mod recording;
 mod score_sync;
 mod soundtrack;

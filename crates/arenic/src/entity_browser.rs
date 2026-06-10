@@ -148,10 +148,11 @@ fn window_range(scroll_row: usize, len: usize, current: Option<(usize, usize)>) 
     (start, end)
 }
 
-/// Marker components for the panel skeleton + pooled rows.
+/// Marker components for the panel skeleton + pooled rows. `BrowserPanel`
+/// is the host-agnostic panel ROOT the pop-out module re-parents.
 #[derive(Component)]
 #[component(immutable)]
-struct BrowserPanel;
+pub(crate) struct BrowserPanel;
 #[derive(Component)]
 #[component(immutable)]
 struct BrowserHeader;

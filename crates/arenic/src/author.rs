@@ -903,6 +903,7 @@ impl Plugin for AuthorPlugin {
         app.add_plugins((
             crate::dope_sheet::DopeSheetPlugin,
             crate::entity_browser::EntityBrowserPlugin,
+            crate::popout::PopOutPlugin,
         ))
         .init_resource::<TileEditor>()
         .add_systems(OnEnter(AppState::Intro), setup_author_hud)

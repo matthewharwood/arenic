@@ -113,10 +113,11 @@ impl SheetView {
     }
 }
 
-/// Marker components for the panel's mount points.
+/// Marker components for the panel's mount points. `SheetBody` is the
+/// host-agnostic panel ROOT the pop-out module re-parents between windows.
 #[derive(Component)]
 #[component(immutable)]
-struct SheetBody;
+pub(crate) struct SheetBody;
 #[derive(Component)]
 #[component(immutable)]
 struct SheetChannels;
