@@ -4,6 +4,8 @@
 mod author;
 #[cfg(all(feature = "author", not(target_arch = "wasm32")))]
 mod dope_sheet;
+#[cfg(all(feature = "author", not(target_arch = "wasm32")))]
+mod entity_browser;
 mod hud;
 mod intro_scene;
 mod modal;

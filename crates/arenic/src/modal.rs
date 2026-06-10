@@ -74,8 +74,13 @@ struct ModalOption(usize);
 pub(crate) struct ModalLatch(pub(crate) bool);
 
 /// `true` while no modal is open or opening — gates every world-input system.
-pub(crate) fn no_modal(latch: Res<ModalLatch>) -> bool {
-    !latch.0
+/// The entity browser's focus folds in here too: its type-to-filter owns the
+/// keyboard, and every world gate already chains `no_modal`.
+pub(crate) fn no_modal(
+    latch: Res<ModalLatch>,
+    browser: Option<Res<crate::states::BrowserFocus>>,
+) -> bool {
+    !latch.0 && browser.is_none()
 }
 
 /// Spawns the overlay, registers it as the [`ActiveModal`], and pauses `clock`

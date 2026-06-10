@@ -23,3 +23,10 @@ pub(crate) struct TileEditMode;
 pub(crate) fn not_tile_editing(mode: Option<Res<TileEditMode>>) -> bool {
     mode.is_none()
 }
+
+/// Present while the author feature's ENTITY BROWSER owns the keyboard (its
+/// type-to-filter would otherwise trip every letter hotkey). Folded into
+/// [`crate::modal::no_modal`], so every world-input gate yields without
+/// touching its registration. Author-only, like [`TileEditMode`].
+#[derive(Resource)]
+pub(crate) struct BrowserFocus;

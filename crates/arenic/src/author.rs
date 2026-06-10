@@ -625,10 +625,43 @@ fn publish_stack(
     }
 }
 
+/// Pushes a new MINION layer (alive from `spawn_tick` to the cycle's end,
+/// empty staff) onto `stack`, returning its id — shared by the `M` key and
+/// the entity browser's Enter/drag placement.
+pub(crate) fn push_minion_layer(
+    stack: &mut ArenaStack,
+    spawn_tick: u32,
+    spawn_tile: IVec2,
+) -> LayerId {
+    let ordinal = stack
+        .stack
+        .layers
+        .iter()
+        .filter(|layer| matches!(layer.kind, LayerKind::Minion(_)))
+        .count()
+        .strict_add(1);
+    let id = stack.stack.next_id();
+    stack.stack.layers.push(Layer::new(
+        id,
+        format!("Minion {ordinal}"),
+        LayerKind::Minion(MinionLayer {
+            archetype: MinionArchetype::Token,
+            spawn_tick,
+            despawn_tick: CYCLE_TICKS,
+            spawn_tile,
+            recording: Recording {
+                start: spawn_tile,
+                events: Vec::new().into(),
+            },
+        }),
+    ));
+    id
+}
+
 /// `M` — drop a new MINION layer at the playhead: spawn tile near the arena
 /// centre, alive from the current tick to the cycle's end, empty staff. The
 /// preview re-folds (pre-spawning the hidden token); possess it with `B`,
-/// record with `R`, publish with `W`. The entity browser (ARE-43) supersedes
+/// record with `R`, publish with `W`. The entity browser (`E`) supersedes
 /// this as the primary creation path.
 fn add_minion_layer(
     mut commands: Commands,
@@ -651,34 +684,8 @@ fn add_minion_layer(
             &mut fresh_stack
         }
     };
-    let ordinal = stack
-        .stack
-        .layers
-        .iter()
-        .filter(|layer| matches!(layer.kind, LayerKind::Minion(_)))
-        .count()
-        .strict_add(1);
-    let spawn_tile = IVec2::new(30, 12);
-    let id = stack.stack.next_id();
-    stack.stack.layers.push(Layer::new(
-        id,
-        format!("Minion {ordinal}"),
-        LayerKind::Minion(MinionLayer {
-            archetype: MinionArchetype::Token,
-            spawn_tick: clock.tick,
-            despawn_tick: CYCLE_TICKS,
-            spawn_tile,
-            recording: Recording {
-                start: spawn_tile,
-                events: Vec::new().into(),
-            },
-        }),
-    ));
-    info!(
-        "{}: new minion layer \"Minion {ordinal}\" at tick {}",
-        arena.name(),
-        clock.tick
-    );
+    push_minion_layer(stack, clock.tick, IVec2::new(30, 12));
+    info!("{}: new minion layer at tick {}", arena.name(), clock.tick);
     if created {
         commands.entity(arena_entity).insert(stack.clone());
     }
@@ -893,92 +900,93 @@ pub(crate) struct AuthorPlugin;
 
 impl Plugin for AuthorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(crate::dope_sheet::DopeSheetPlugin)
-            .init_resource::<TileEditor>()
-            .add_systems(OnEnter(AppState::Intro), setup_author_hud)
-            .add_systems(OnExit(AppState::Intro), reset_on_exit)
-            .add_systems(
-                Update,
+        app.add_plugins((
+            crate::dope_sheet::DopeSheetPlugin,
+            crate::entity_browser::EntityBrowserPlugin,
+        ))
+        .init_resource::<TileEditor>()
+        .add_systems(OnEnter(AppState::Intro), setup_author_hud)
+        .add_systems(OnExit(AppState::Intro), reset_on_exit)
+        .add_systems(
+            Update,
+            (
+                possess_boss.run_if(
+                    input_just_pressed(KeyCode::KeyB)
+                        .and(no_modal)
+                        .and(is_idle)
+                        .and(no_pending_walk)
+                        .and(not_tile_editing),
+                ),
+                cycle_difficulty.run_if(
+                    input_just_pressed(KeyCode::KeyD)
+                        .and(no_modal)
+                        .and(is_idle)
+                        .and(not_tile_editing),
+                ),
+                boss_cast_slots.run_if(
+                    input_just_pressed(KeyCode::Digit1)
+                        .or(input_just_pressed(KeyCode::Numpad1))
+                        .or(input_just_pressed(KeyCode::Digit2))
+                        .or(input_just_pressed(KeyCode::Numpad2))
+                        .or(input_just_pressed(KeyCode::Digit3))
+                        .or(input_just_pressed(KeyCode::Numpad3))
+                        .or(input_just_pressed(KeyCode::Digit4))
+                        .or(input_just_pressed(KeyCode::Numpad4))
+                        .and(no_modal)
+                        .and(not_counting_down)
+                        .and(no_pending_walk)
+                        .and(not_tile_editing),
+                ),
+                commit_to_layer.run_if(on_message::<RecordingCommitted>),
+                add_minion_layer.run_if(
+                    input_just_pressed(KeyCode::KeyM)
+                        .and(no_modal)
+                        .and(is_idle)
+                        .and(not_tile_editing),
+                ),
+                // `W` publishes the focused arena's whole stack — from
+                // anywhere in author mode, tile editor open or not.
+                publish_stack.run_if(input_just_pressed(KeyCode::KeyW).and(no_modal).and(is_idle)),
+                toggle_tile_mode.run_if(
+                    input_just_pressed(KeyCode::KeyT)
+                        .and(no_modal)
+                        .and(is_idle)
+                        .and(no_pending_walk),
+                ),
+                restart_current.run_if(
+                    input_just_pressed(KeyCode::F5)
+                        .and(no_modal)
+                        .and(is_idle)
+                        .and(not_tile_editing),
+                ),
+                // The editor's own keys — only while it is open (and no
+                // modal): the cursor, the scrub, the marks, the paint, the
+                // save.
                 (
-                    possess_boss.run_if(
-                        input_just_pressed(KeyCode::KeyB)
-                            .and(no_modal)
-                            .and(is_idle)
-                            .and(no_pending_walk)
-                            .and(not_tile_editing),
+                    move_cursor.run_if(arrow_pressed),
+                    scrub.run_if(
+                        input_just_pressed(KeyCode::Period).or(input_just_pressed(KeyCode::Comma)),
                     ),
-                    cycle_difficulty.run_if(
-                        input_just_pressed(KeyCode::KeyD)
-                            .and(no_modal)
-                            .and(is_idle)
-                            .and(not_tile_editing),
+                    set_marks.run_if(
+                        input_just_pressed(KeyCode::KeyI).or(input_just_pressed(KeyCode::KeyO)),
                     ),
-                    boss_cast_slots.run_if(
-                        input_just_pressed(KeyCode::Digit1)
-                            .or(input_just_pressed(KeyCode::Numpad1))
-                            .or(input_just_pressed(KeyCode::Digit2))
-                            .or(input_just_pressed(KeyCode::Numpad2))
-                            .or(input_just_pressed(KeyCode::Digit3))
-                            .or(input_just_pressed(KeyCode::Numpad3))
-                            .or(input_just_pressed(KeyCode::Digit4))
-                            .or(input_just_pressed(KeyCode::Numpad4))
-                            .and(no_modal)
-                            .and(not_counting_down)
-                            .and(no_pending_walk)
-                            .and(not_tile_editing),
-                    ),
-                    commit_to_layer.run_if(on_message::<RecordingCommitted>),
-                    add_minion_layer.run_if(
-                        input_just_pressed(KeyCode::KeyM)
-                            .and(no_modal)
-                            .and(is_idle)
-                            .and(not_tile_editing),
-                    ),
-                    // `W` publishes the focused arena's whole stack — from
-                    // anywhere in author mode, tile editor open or not.
-                    publish_stack
-                        .run_if(input_just_pressed(KeyCode::KeyW).and(no_modal).and(is_idle)),
-                    toggle_tile_mode.run_if(
-                        input_just_pressed(KeyCode::KeyT)
-                            .and(no_modal)
-                            .and(is_idle)
-                            .and(no_pending_walk),
-                    ),
-                    restart_current.run_if(
-                        input_just_pressed(KeyCode::F5)
-                            .and(no_modal)
-                            .and(is_idle)
-                            .and(not_tile_editing),
-                    ),
-                    // The editor's own keys — only while it is open (and no
-                    // modal): the cursor, the scrub, the marks, the paint, the
-                    // save.
-                    (
-                        move_cursor.run_if(arrow_pressed),
-                        scrub.run_if(
-                            input_just_pressed(KeyCode::Period)
-                                .or(input_just_pressed(KeyCode::Comma)),
-                        ),
-                        set_marks.run_if(
-                            input_just_pressed(KeyCode::KeyI).or(input_just_pressed(KeyCode::KeyO)),
-                        ),
-                        paint.run_if(input_just_pressed(KeyCode::Space)),
-                        cycle_tile_layer.run_if(input_just_pressed(KeyCode::Tab)),
-                        new_tile_layer.run_if(input_just_pressed(KeyCode::KeyN)),
-                    )
-                        .run_if(tile_editing.and(no_modal)),
-                    // The chip re-renders only when one of its inputs moved —
-                    // its strings are rebuilt on demand, not per frame.
-                    update_author_hud.run_if(
-                        resource_changed::<CurrentArena>
-                            .or(resource_changed::<ActiveDifficulty>)
-                            .or(resource_changed::<TileEditor>)
-                            .or(resource_added::<TileEditMode>)
-                            .or(resource_removed::<TileEditMode>)
-                            .or(stacks_changed),
-                    ),
+                    paint.run_if(input_just_pressed(KeyCode::Space)),
+                    cycle_tile_layer.run_if(input_just_pressed(KeyCode::Tab)),
+                    new_tile_layer.run_if(input_just_pressed(KeyCode::KeyN)),
                 )
-                    .run_if(in_state(AppState::Intro)),
-            );
+                    .run_if(tile_editing.and(no_modal)),
+                // The chip re-renders only when one of its inputs moved —
+                // its strings are rebuilt on demand, not per frame.
+                update_author_hud.run_if(
+                    resource_changed::<CurrentArena>
+                        .or(resource_changed::<ActiveDifficulty>)
+                        .or(resource_changed::<TileEditor>)
+                        .or(resource_added::<TileEditMode>)
+                        .or(resource_removed::<TileEditMode>)
+                        .or(stacks_changed),
+                ),
+            )
+                .run_if(in_state(AppState::Intro)),
+        );
     }
 }
