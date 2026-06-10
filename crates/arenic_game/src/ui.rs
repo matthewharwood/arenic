@@ -1,14 +1,16 @@
 use bevy::prelude::*;
 
-const NORMAL: Color = Color::srgb(0.15, 0.15, 0.18);
-const HOVERED: Color = Color::srgb(0.25, 0.25, 0.30);
+use crate::theme::Theme;
 
 /// Spawns a clickable text button and returns its entity so the caller can
 /// attach an `On<Pointer<Click>>` observer and parent it where needed.
 ///
-/// Hover feedback is wired up here via `Over`/`Out` observers; the click
-/// behaviour is left to the caller since it varies per button.
-pub fn menu_button(commands: &mut Commands, label: &str, font_size: f32) -> Entity {
+/// Colours come from `theme`'s tokens (`surface_3` rest, `interactions` hover,
+/// `text_1` label). Hover feedback is wired up here via `Over`/`Out` observers;
+/// the click behaviour is left to the caller since it varies per button.
+pub fn menu_button(commands: &mut Commands, theme: &Theme, label: &str, font_size: f32) -> Entity {
+    let rest = theme.surface_3();
+    let (hover, _press) = theme.interactions(rest);
     commands
         .spawn((
             Button,
@@ -19,25 +21,29 @@ pub fn menu_button(commands: &mut Commands, label: &str, font_size: f32) -> Enti
                 border_radius: BorderRadius::all(Val::Px(6.0)),
                 ..default()
             },
-            BackgroundColor(NORMAL),
+            BackgroundColor(rest),
             children![(
                 Text::new(label),
                 TextFont {
                     font_size,
                     ..default()
                 },
-                TextColor(Color::WHITE),
+                TextColor(theme.text_1()),
             )],
         ))
-        .observe(|ev: On<Pointer<Over>>, mut q: Query<&mut BackgroundColor>| {
-            if let Ok(mut bg) = q.get_mut(ev.entity) {
-                bg.0 = HOVERED;
-            }
-        })
-        .observe(|ev: On<Pointer<Out>>, mut q: Query<&mut BackgroundColor>| {
-            if let Ok(mut bg) = q.get_mut(ev.entity) {
-                bg.0 = NORMAL;
-            }
-        })
+        .observe(
+            move |ev: On<Pointer<Over>>, mut q: Query<&mut BackgroundColor>| {
+                if let Ok(mut bg) = q.get_mut(ev.entity) {
+                    bg.0 = hover;
+                }
+            },
+        )
+        .observe(
+            move |ev: On<Pointer<Out>>, mut q: Query<&mut BackgroundColor>| {
+                if let Ok(mut bg) = q.get_mut(ev.entity) {
+                    bg.0 = rest;
+                }
+            },
+        )
         .id()
 }

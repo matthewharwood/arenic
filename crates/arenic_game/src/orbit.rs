@@ -3,8 +3,8 @@
 //!
 //! Attach an [`OrbitCamera`] to a `Camera3d` and add [`OrbitCameraPlugin`]. The
 //! camera starts **locked** at the pose you pass to [`OrbitCamera::new`] (its
-//! "home"); flip `unlocked` (e.g. from a UI button) to drive it with the
-//! mouse/trackpad, and call [`OrbitCamera::reset`] to snap back home.
+//! "home"); insert [`OrbitUnlocked`] (e.g. from a UI button) to drive it with the
+//! mouse/trackpad, and remove it + call [`OrbitCamera::reset`] to snap back home.
 //!
 //! Controls (Blender-like):
 //!
@@ -41,9 +41,13 @@ pub struct OrbitCamera {
     pub pitch: f32,
     pub radius: f32,
     pub home: OrbitPose,
-    /// When `false`, input is ignored and the camera holds its pose.
-    pub unlocked: bool,
 }
+
+/// Present while the camera follows mouse/trackpad input; absent = locked, the
+/// camera holds its pose.
+#[derive(Component)]
+#[component(immutable)]
+pub struct OrbitUnlocked;
 
 impl OrbitCamera {
     /// Builds a locked orbit camera whose home (and starting) pose looks at
@@ -61,7 +65,6 @@ impl OrbitCamera {
                 pitch,
                 radius,
             },
-            unlocked: false,
         }
     }
 
@@ -99,7 +102,7 @@ const MAX_RADIUS: f32 = 140.0;
 
 /// Reads mouse/trackpad input and updates every unlocked [`OrbitCamera`].
 fn orbit_input(
-    mut cameras: Query<&mut OrbitCamera>,
+    mut cameras: Query<&mut OrbitCamera, With<OrbitUnlocked>>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut motion: MessageReader<MouseMotion>,
@@ -152,9 +155,6 @@ fn orbit_input(
     }
 
     for mut cam in &mut cameras {
-        if !cam.unlocked {
-            continue;
-        }
         cam.yaw -= orbit.x * ORBIT_SPEED;
         cam.pitch = (cam.pitch - orbit.y * ORBIT_SPEED).clamp(-PITCH_LIMIT, PITCH_LIMIT);
         cam.radius = (cam.radius * zoom).clamp(MIN_RADIUS, MAX_RADIUS);
@@ -170,6 +170,6 @@ fn orbit_input(
 /// locked camera holds home and an unlocked one follows the input.
 fn apply_orbit(mut cameras: Query<(&OrbitCamera, &mut Transform)>) {
     for (cam, mut transform) in &mut cameras {
-        *transform = cam.transform();
+        transform.set_if_neq(cam.transform());
     }
 }

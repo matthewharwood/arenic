@@ -1,7 +1,7 @@
 //! Stage **layer visibility** — small checkboxes in the storybook toggle each
 //! visual layer of the shared 3D stage on and off (all ON by default).
 //!
-//! Every toggleable entity carries a [`LayerTag`]; one system reconciles each
+//! Every toggleable entity carries a [`OnLayer`]; one system reconciles each
 //! entity's `Visibility` from the [`LayerVisibility`] resource, so toggles also
 //! apply to per-story respawns (boss / swarm / props) and persist across stories.
 
@@ -40,9 +40,10 @@ impl Layer {
     }
 }
 
-/// Tags an entity as belonging to a toggleable [`Layer`].
+/// Tags an entity as belonging to a toggleable [`Layer`]. Set once at spawn.
 #[derive(Component, Clone, Copy)]
-pub struct LayerTag(pub Layer);
+#[component(immutable)]
+pub struct OnLayer(pub Layer);
 
 /// Which layers are currently visible — one flag per [`Layer`], indexed by it
 /// (no parallel field-per-layer struct to keep in sync). All on by default.
@@ -93,12 +94,10 @@ fn visibility_for(visible: bool) -> Visibility {
 }
 
 /// Reconciles every tagged entity's `Visibility` when the toggle set changes.
-fn reconcile_layers(vis: Res<LayerVisibility>, mut tagged: Query<(&LayerTag, &mut Visibility)>) {
+fn reconcile_layers(vis: Res<LayerVisibility>, mut tagged: Query<(&OnLayer, &mut Visibility)>) {
     for (tag, mut visibility) in &mut tagged {
         let want = visibility_for(vis.get(tag.0));
-        if *visibility != want {
-            *visibility = want;
-        }
+        visibility.set_if_neq(want);
     }
 }
 
@@ -106,13 +105,11 @@ fn reconcile_layers(vis: Res<LayerVisibility>, mut tagged: Query<(&LayerTag, &mu
 /// content honours a layer that is currently toggled off — without a full re-scan.
 fn init_new_layers(
     vis: Res<LayerVisibility>,
-    mut tagged: Query<(&LayerTag, &mut Visibility), Added<LayerTag>>,
+    mut tagged: Query<(&OnLayer, &mut Visibility), Added<OnLayer>>,
 ) {
     for (tag, mut visibility) in &mut tagged {
         let want = visibility_for(vis.get(tag.0));
-        if *visibility != want {
-            *visibility = want;
-        }
+        visibility.set_if_neq(want);
     }
 }
 

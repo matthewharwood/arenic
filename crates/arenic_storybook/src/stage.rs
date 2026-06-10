@@ -18,12 +18,14 @@
 
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_8};
 
-use arenic_game::boss::{
-    boss_a, capsule_resonator, hex_prism, hollow_icosphere, hollow_obelisk, stepped_pyramid,
-    torus_halo, triangular_prism, truncated_cone,
+use arenic_game::arena::Prim;
+use arenic_game::boss::{BossShell, BossSpec, LightBehavior, boss_a};
+use arenic_game::grid::{
+    ARENA_H, ARENA_W, GRID_H, GRID_W, GridPlugin, TILE, TileMover, board_center, tile_to_world,
 };
-use arenic_game::orbit::OrbitCamera;
-use arenic_game::theme::{ActiveTheme, Theme};
+use arenic_game::guildmaster::guildmaster;
+use arenic_game::orbit::{OrbitCamera, OrbitUnlocked};
+use arenic_game::theme::{ActiveTheme, Theme, Tint};
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::RenderTarget;
 use bevy::color::Alpha;
@@ -33,10 +35,12 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
 use bevy::render::view::Hdr;
 
-use crate::arena::{BossShell, BossSpec, spec};
+use crate::abilities::Player;
+use crate::arena::spec;
 use crate::hollow::{HollowLight, spawn_hollow_boss};
-use crate::layers::{Layer, LayerTag};
+use crate::layers::{Layer, OnLayer};
 use crate::stories::StoryId;
+use crate::storybook::CurrentStory;
 
 /// A fixed near-black for every hollow shell — the doc's "preserve dark exterior
 /// mass" rule. The glow (the inner core) carries the theme colour, not the shell.
@@ -48,40 +52,30 @@ fn shell_dark(_theme: &Theme) -> Color {
 const STAGE_W: u32 = 1024;
 const STAGE_H: u32 = 576;
 
-// Arena dimensions, straight from UNITS_AND_SCALE §1.
-const GRID_W: i32 = 66;
-const GRID_H: i32 = 31;
-const TILE: f32 = 0.25;
-
-/// The board centre — the midpoint of the tile-centre extents (`0..16.25`,
-/// `0..7.5`). The camera frames here and content is dropped here. The single
-/// source of truth for board geometry (the atmosphere swarm consumes it too).
-pub(crate) fn board_center() -> Vec2 {
-    Vec2::new(
-        (GRID_W - 1) as f32 * TILE * 0.5, // 8.125
-        (GRID_H - 1) as f32 * TILE * 0.5, // 3.75
-    )
-}
-
 /// Builds the reusable 3D stage, swaps per-story content, and keeps both in sync
-/// with the active theme.
+/// with the active theme. Board geometry (`arenic_game::grid`) is the shared
+/// source of truth; [`GridPlugin`] steps any board puck a tile per arrow press.
 pub struct StagePlugin;
 
 impl Plugin for StagePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_stage).add_systems(
-            Update,
-            (
-                // Re-populate the board whenever the selected story changes.
-                swap_content.run_if(resource_changed::<crate::storybook::CurrentStory>),
-                // Discover async-loaded glTF materials — clones each into a private
-                // instance and paints it once, so the systems below need only run
-                // on a real theme switch (not every frame).
-                collect_content_materials,
-                retheme_stage.run_if(resource_changed::<ActiveTheme>),
-                retheme_content.run_if(resource_changed::<ActiveTheme>),
-            ),
-        );
+        app.add_plugins(GridPlugin)
+            .add_systems(Startup, setup_stage)
+            .add_systems(
+                Update,
+                (
+                    // Re-populate the board whenever the selected story changes.
+                    swap_content.run_if(resource_changed::<CurrentStory>),
+                    // Discover async-loaded glTF materials — clones each into a private
+                    // instance and paints it once, so the systems below need only run
+                    // on a real theme switch (not every frame).
+                    collect_content_materials,
+                    retheme_stage.run_if(
+                        resource_exists::<StageMaterials>.and(resource_changed::<ActiveTheme>),
+                    ),
+                    retheme_content.run_if(resource_changed::<ActiveTheme>),
+                ),
+            );
     }
 }
 
@@ -115,16 +109,18 @@ pub struct StageCamera;
 /// This is the generic generalisation of ARE-3's guildmaster-only `DiscRoot`:
 /// any story can drop themed content with one tag.
 #[derive(Component, Clone, Copy)]
+#[component(immutable)]
 pub struct StageContent {
     /// Resolves the content's base colour from the active theme, so it re-tones
     /// on every theme switch (e.g. `|t| t.brand()`).
-    pub tint: fn(&Theme) -> Color,
+    pub tint: Tint,
 }
 
 /// The collected `StandardMaterial` handles of a [`StageContent`] root, recorded
 /// once its glTF scene has finished spawning. Lives on the content entity, so it
 /// despawns with the content on a story swap — no stale global state.
 #[derive(Component)]
+#[component(immutable)]
 struct ContentMaterials(Vec<Handle<StandardMaterial>>);
 
 /// Builds the reusable render-to-texture stage once at startup: the target
@@ -172,7 +168,6 @@ fn setup_stage(
         }),
         Camera {
             order: -1,
-            clear_color: ClearColorConfig::Custom(Color::srgb(0.90, 0.90, 0.93)),
             ..default()
         },
         RenderTarget::Image(image.into()),
@@ -200,8 +195,8 @@ fn setup_stage(
     ));
 
     // --- Board surface (catches the shadow; the light backdrop of the grid) ---
-    let board_w = GRID_W as f32 * TILE + 0.7;
-    let board_h = GRID_H as f32 * TILE + 0.7;
+    let board_w = ARENA_W + 0.7;
+    let board_h = ARENA_H + 0.7;
     let board_mat = materials.add(StandardMaterial {
         // "Liquid glass": a translucent (alpha-blended) sheet — the skybox AND the
         // under-floor swarm show through it, while it stays a LIT surface so it
@@ -217,7 +212,7 @@ fn setup_stage(
         Mesh3d(meshes.add(Rectangle::new(board_w, board_h))),
         MeshMaterial3d(board_mat.clone()),
         Transform::from_xyz(cx, cy, -0.02),
-        LayerTag(Layer::Floor),
+        OnLayer(Layer::Floor),
     ));
 
     // --- Dot grid: a small disc at every tile centre (Circle faces +Z) ---
@@ -232,7 +227,7 @@ fn setup_stage(
                 Mesh3d(dot_mesh.clone()),
                 MeshMaterial3d(dot_mat.clone()),
                 Transform::from_xyz(col as f32 * TILE, row as f32 * TILE, 0.001),
-                LayerTag(Layer::Floor),
+                OnLayer(Layer::Floor),
             ));
         }
     }
@@ -260,7 +255,7 @@ fn setup_stage(
             Mesh3d(meshes.add(Cuboid::new(w, h, 0.012))),
             MeshMaterial3d(border_mat.clone()),
             Transform::from_xyz(x, y, z),
-            LayerTag(Layer::Floor),
+            OnLayer(Layer::Floor),
         ));
     }
 
@@ -285,9 +280,9 @@ fn swap_content(
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    current: Res<crate::storybook::CurrentStory>,
+    current: Res<CurrentStory>,
     existing: Query<Entity, Or<(With<StageContent>, With<HollowLight>)>>,
-    mut cams: Query<&mut OrbitCamera>,
+    mut cams: Query<(Entity, &mut OrbitCamera)>,
 ) {
     for entity in &existing {
         commands.entity(entity).despawn();
@@ -297,20 +292,34 @@ fn swap_content(
     // orbit-unlock toggle only exists on 3D stories, so a camera left unlocked
     // would otherwise strand canvas scrolling with no visible control to relock.
     if !current.0.is_some_and(StoryId::has_3d_stage) {
-        for mut cam in &mut cams {
-            cam.unlocked = false;
+        for (entity, mut cam) in &mut cams {
             cam.reset();
+            // The marker removal only applies at the command flush, so an
+            // unordered `orbit_input` later this same frame can still drift the
+            // camera — re-assert the home pose at the flush that relocks it.
+            commands.entity(entity).remove::<OrbitUnlocked>().queue(
+                |mut cam_entity: EntityWorldMut| {
+                    if let Some(mut cam) = cam_entity.get_mut::<OrbitCamera>() {
+                        cam.reset();
+                    }
+                },
+            );
         }
     }
 
     let Some(story) = current.0 else {
         return;
     };
+    let center = board_center();
+    // The abilities test scene isn't an arena — it gets a player puck + a target boss.
+    if story == StoryId::HolyNova {
+        spawn_ability_scene(&mut commands, &mut meshes, &mut materials, &assets, center);
+        return;
+    }
     // The arena's whole identity (boss + props) comes from the one ArenaSpec table.
     let Some(arena) = spec(story) else {
         return;
     };
-    let center = board_center();
     spawn_boss(
         &mut commands,
         &mut meshes,
@@ -354,7 +363,7 @@ fn spawn_boss(
             commands.spawn((
                 boss_a(assets),
                 StageContent { tint: color },
-                LayerTag(Layer::Boss),
+                OnLayer(Layer::Boss),
                 Transform::from_xyz(center.x, center.y, 0.02).with_rotation(face_camera),
             ));
         }
@@ -367,108 +376,70 @@ fn spawn_boss(
         } => {
             let core_mesh = core.to_mesh();
             let rest = Transform::from_xyz(0.0, 0.0, core_z);
-            // The single shell → glTF-loader mapping. Each arm spawns the shell its
-            // arena chose; only one runs, so `core_mesh` moves into exactly one call.
-            match shell {
-                BossShell::Obelisk => spawn_hollow_boss(
-                    commands,
-                    meshes,
-                    materials,
-                    center,
-                    hollow_obelisk(assets),
-                    shell_dark,
-                    core_mesh,
-                    rest,
-                    behavior,
-                    color,
-                ),
-                BossShell::TruncatedCone => spawn_hollow_boss(
-                    commands,
-                    meshes,
-                    materials,
-                    center,
-                    truncated_cone(assets),
-                    shell_dark,
-                    core_mesh,
-                    rest,
-                    behavior,
-                    color,
-                ),
-                BossShell::TorusHalo => spawn_hollow_boss(
-                    commands,
-                    meshes,
-                    materials,
-                    center,
-                    torus_halo(assets),
-                    shell_dark,
-                    core_mesh,
-                    rest,
-                    behavior,
-                    color,
-                ),
-                BossShell::HexPrism => spawn_hollow_boss(
-                    commands,
-                    meshes,
-                    materials,
-                    center,
-                    hex_prism(assets),
-                    shell_dark,
-                    core_mesh,
-                    rest,
-                    behavior,
-                    color,
-                ),
-                BossShell::TriangularPrism => spawn_hollow_boss(
-                    commands,
-                    meshes,
-                    materials,
-                    center,
-                    triangular_prism(assets),
-                    shell_dark,
-                    core_mesh,
-                    rest,
-                    behavior,
-                    color,
-                ),
-                BossShell::CapsuleResonator => spawn_hollow_boss(
-                    commands,
-                    meshes,
-                    materials,
-                    center,
-                    capsule_resonator(assets),
-                    shell_dark,
-                    core_mesh,
-                    rest,
-                    behavior,
-                    color,
-                ),
-                BossShell::SteppedPyramid => spawn_hollow_boss(
-                    commands,
-                    meshes,
-                    materials,
-                    center,
-                    stepped_pyramid(assets),
-                    shell_dark,
-                    core_mesh,
-                    rest,
-                    behavior,
-                    color,
-                ),
-                BossShell::HollowIcosphere => spawn_hollow_boss(
-                    commands,
-                    meshes,
-                    materials,
-                    center,
-                    hollow_icosphere(assets),
-                    shell_dark,
-                    core_mesh,
-                    rest,
-                    behavior,
-                    color,
-                ),
-            };
+            // One call — the shell → glTF mapping now lives in `BossShell::scene`.
+            spawn_hollow_boss(
+                commands,
+                meshes,
+                materials,
+                center,
+                shell.scene(assets),
+                shell_dark,
+                core_mesh,
+                rest,
+                behavior,
+                color,
+            );
         }
     }
+}
+
+/// The `abilities/*` test scene: a neutral player puck at centre-front + a glowing
+/// target boss set back from it. The ability itself fires from [`crate::abilities`]
+/// on a key press; this just stages something to cast at.
+fn spawn_ability_scene(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    assets: &AssetServer,
+    center: Vec2,
+) {
+    // A target to fire at — a glowing torus (no class), set back from centre.
+    spawn_hollow_boss(
+        commands,
+        meshes,
+        materials,
+        Vec2::new(center.x, center.y + 1.6),
+        BossShell::TorusHalo.scene(assets),
+        shell_dark,
+        Cuboid::new(0.55, 0.55, 0.04).into(),
+        Transform::from_xyz(0.0, 0.0, 0.06),
+        LightBehavior::HaloFill,
+        |t| t.warning,
+    );
+
+    // The controllable player — a guildmaster puck near board centre.
+    spawn_guildmaster_puck(commands, assets, 32, 10);
+}
+
+/// Spawns a **guildmaster puck** — the flat `guildmaster.glb` disc — onto the board
+/// at tile `(col, row)`. It's the controllable player: it casts abilities (tagged
+/// [`crate::abilities::Player`]) and steps a tile per arrow-key press (tagged
+/// [`TileMover`], driven by [`GridPlugin`]). Any story that wants a controllable
+/// guildmaster calls this.
+fn spawn_guildmaster_puck(commands: &mut Commands, assets: &AssetServer, col: i32, row: i32) {
+    let p = tile_to_world(col, row);
+    commands.spawn((
+        // `guildmaster()` brings the disc + the `Guildmaster` marker; we add the
+        // player/mover roles so any guildmaster puck is castable + controllable.
+        guildmaster(assets),
+        Player,
+        TileMover::new(col, row),
+        StageContent {
+            tint: |t| t.text_1(),
+        },
+        // Lies flat facing the camera (§5); §5 +90°X for the authored Y-up disc.
+        Transform::from_xyz(p.x, p.y, 0.02).with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
+    ));
 }
 
 /// Once a [`StageContent`] root's glTF scene has spawned and its materials have
@@ -524,13 +495,10 @@ fn collect_content_materials(
 /// costs nothing between theme switches.
 fn retheme_stage(
     active: Res<ActiveTheme>,
-    stage: Option<Res<StageMaterials>>,
+    stage: Res<StageMaterials>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut camera: Query<&mut Camera, With<StageCamera>>,
 ) {
-    let Some(stage) = stage else {
-        return;
-    };
     let theme = active.palette();
 
     // Translucent so the skybox + under-floor swarm read through the liquid glass.
@@ -581,16 +549,6 @@ fn set_base_color(
     }
 }
 
-/// A low-poly placeholder primitive for one flora/fauna prop.
-#[derive(Clone, Copy)]
-pub(crate) enum Prim {
-    Cuboid(f32, f32, f32),
-    Sphere(f32),
-    Cylinder(f32, f32),
-    Cone(f32, f32),
-    Capsule(f32, f32),
-}
-
 /// Spawns one ambient prop resting on the board at `center + offset`, tinted
 /// on-theme. Upright forms (cylinder/cone/capsule) are stood up along `+Z`; the
 /// cuboid's `z` is its height; a sphere rests on its radius.
@@ -601,22 +559,10 @@ fn spawn_prop(
     center: Vec2,
     prim: Prim,
     offset: Vec2,
-    tint: fn(&Theme) -> Color,
+    tint: Tint,
 ) {
-    let (mesh, z_rest, stand) = match prim {
-        Prim::Cuboid(x, y, h) => (meshes.add(Cuboid::new(x, y, h)), h * 0.5, false),
-        Prim::Sphere(r) => (meshes.add(Sphere::new(r)), r, false),
-        Prim::Cylinder(r, h) => (meshes.add(Cylinder::new(r, h)), h * 0.5, true),
-        Prim::Cone(r, h) => (
-            meshes.add(Cone {
-                radius: r,
-                height: h,
-            }),
-            h * 0.5,
-            true,
-        ),
-        Prim::Capsule(r, h) => (meshes.add(Capsule3d::new(r, h)), h * 0.5 + r, true),
-    };
+    let (mesh, z_rest, stand) = prim.to_mesh();
+    let mesh = meshes.add(mesh);
     let mut transform = Transform::from_xyz(center.x + offset.x, center.y + offset.y, z_rest);
     if stand {
         transform.rotation = Quat::from_rotation_x(FRAC_PI_2);
@@ -629,18 +575,9 @@ fn spawn_prop(
         })),
         transform,
         StageContent { tint },
-        LayerTag(Layer::Props),
+        OnLayer(Layer::Props),
     ));
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn board_center_is_the_grid_midpoint() {
-        // The single source of truth the atmosphere swarm also consumes — pin it so
-        // a grid-constant change can't silently drift the swarm off-centre.
-        assert_eq!(board_center(), Vec2::new(8.125, 3.75));
-    }
-}
+// `board_center` (and its midpoint test) lives in `arenic_game::grid`, shared
+// with the game.

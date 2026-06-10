@@ -9,6 +9,7 @@
 //! cargo run -p arenic_storybook
 //! ```
 
+mod abilities;
 mod arena;
 mod foreground;
 mod hollow;
@@ -18,8 +19,8 @@ mod stories;
 mod storybook;
 mod widgets;
 
+use arenic_game::InteractionPlugin;
 use arenic_game::default_font::DefaultFontPlugin;
-use arenic_game::interaction::InteractionPlugin;
 use arenic_game::orbit::OrbitCameraPlugin;
 use bevy::prelude::*;
 use storybook::StorybookPlugin;
@@ -34,6 +35,7 @@ fn main() -> AppExit {
         .add_plugins(hollow::HollowLightPlugin)
         .add_plugins(foreground::ForegroundPlugin)
         .add_plugins(layers::LayersPlugin)
+        .add_plugins(abilities::AbilitiesPlugin)
         .add_systems(Startup, spawn_camera)
         .add_plugins(StorybookPlugin)
         .run()

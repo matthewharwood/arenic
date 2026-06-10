@@ -6,6 +6,8 @@
 
 # Web bundle (game + storybook + book) for GitHub Pages
 /dist
+# Trunk per-app build output (crates/<bin>/dist/)
+dist/
 
 # JetBrains IDEs (IntelliJ, CLion, RustRover, etc.)
 # Ignore the entire IDE project directory — it holds user-specific and

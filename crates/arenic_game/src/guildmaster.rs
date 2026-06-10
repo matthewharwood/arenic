@@ -10,6 +10,7 @@ use bevy::prelude::*;
 
 /// Marks a spawned Guildmaster.
 #[derive(Component, Debug, Clone, Copy)]
+#[component(immutable)]
 pub struct Guildmaster;
 
 /// glTF scene path for the disc (Bevy labels the first scene `#Scene0`).
@@ -23,6 +24,6 @@ pub const MODEL: &str = "models/guildmaster.glb#Scene0";
 /// For the top-down game board (board on XY, camera on `+Z`) rotate `+90°`
 /// about X at the call site so the disc faces the camera (UNITS_AND_SCALE §5);
 /// a 3D diorama like the storybook uses it as-is.
-pub fn guildmaster(assets: &AssetServer) -> impl Bundle {
+pub fn guildmaster(assets: &AssetServer) -> impl Bundle + use<> {
     (Guildmaster, SceneRoot(assets.load(MODEL)))
 }

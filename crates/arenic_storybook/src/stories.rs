@@ -3,11 +3,12 @@
 //! `arenic_game` piece onto the shared top-down 3D stage (see [`crate::stage`]).
 //! Each builder fills a `content` column using the active [`Theme`].
 
-use arenic_game::interaction::{Interactive, hidden_outline};
 use arenic_game::theme::{Theme, ThemeId, scale};
+use arenic_game::{Interactive, hidden_outline};
 use bevy::prelude::*;
+use bevy::text::Font;
 
-use crate::widgets::{self, column, heading, hex, label, row, swatch, wrap};
+use crate::widgets::{column, group, heading, hex, label, mono_label, row, swatch, wrap};
 
 /// Every selectable story.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -28,6 +29,8 @@ pub enum StoryId {
     Bard,
     Forager,
     Merchant,
+    // Abilities — arena test scenes for a single ability.
+    HolyNova,
 }
 
 impl StoryId {
@@ -48,6 +51,7 @@ impl StoryId {
             StoryId::Bard => "Bard — Gala",
             StoryId::Forager => "Forager — Mountain",
             StoryId::Merchant => "Merchant — Casino",
+            StoryId::HolyNova => "Holy Nova",
         }
     }
 
@@ -56,15 +60,24 @@ impl StoryId {
     /// story; the stage itself (camera/light/shadow/RTT) is shared — these
     /// stories supply only the content on the board (see [`crate::stage`]).
     pub fn has_3d_stage(self) -> bool {
-        !matches!(
-            self,
+        match self {
             StoryId::Colors
-                | StoryId::Typography
-                | StoryId::Spacing
-                | StoryId::Radii
-                | StoryId::Elevation
-                | StoryId::Components
-        )
+            | StoryId::Typography
+            | StoryId::Spacing
+            | StoryId::Radii
+            | StoryId::Elevation
+            | StoryId::Components => false,
+            StoryId::Guildmaster
+            | StoryId::Hunter
+            | StoryId::Alchemist
+            | StoryId::Cardinal
+            | StoryId::Warrior
+            | StoryId::Thief
+            | StoryId::Bard
+            | StoryId::Forager
+            | StoryId::Merchant
+            | StoryId::HolyNova => true,
+        }
     }
 
     /// The matched theme for an arena story — opening it renders the boss (and
@@ -76,11 +89,13 @@ impl StoryId {
 }
 
 /// Renders `story` (or a placeholder) into the `content` column. `stage` is the
-/// shared 3D render-to-texture that the `units/*` (3D) stories display.
+/// shared 3D render-to-texture that the `units/*` (3D) stories display; `mono` is
+/// the DM Mono handle for digit-bearing token labels.
 pub fn render(
     commands: &mut Commands,
     content: Entity,
     theme: &Theme,
+    mono: &Handle<Font>,
     story: Option<StoryId>,
     stage: &Handle<Image>,
 ) {
@@ -99,11 +114,11 @@ pub fn render(
     commands.entity(content).add_children(&[title]);
 
     match story {
-        StoryId::Colors => colors(commands, content, theme),
-        StoryId::Typography => typography(commands, content, theme),
-        StoryId::Spacing => spacing(commands, content, theme),
+        StoryId::Colors => colors(commands, content, theme, mono),
+        StoryId::Typography => typography(commands, content, theme, mono),
+        StoryId::Spacing => spacing(commands, content, theme, mono),
         StoryId::Radii => radii(commands, content, theme),
-        StoryId::Elevation => elevation(commands, content, theme),
+        StoryId::Elevation => elevation(commands, content, theme, mono),
         StoryId::Components => components(commands, content, theme),
         StoryId::Guildmaster => stage_story(
             commands,
@@ -186,10 +201,20 @@ pub fn render(
              semi-randomly \u{2014} luck and volatility. Press [T] to cycle Normal/Heroic/\
              Mythic; unlock the camera to orbit.",
         ),
+        StoryId::HolyNova => stage_story(
+            commands,
+            content,
+            theme,
+            stage,
+            "Holy Nova \u{2014} fire an ability in an arena. A neutral player puck sits before \
+             a glowing target. Press [1] (or numpad 1) to burst a Holy Nova: a sphere of holy \
+             light expands from the puck and dissipates over the boss. Pick any theme up top to \
+             re-tone the arena; unlock the camera to orbit.",
+        ),
     }
 }
 
-fn colors(commands: &mut Commands, content: Entity, theme: &Theme) {
+fn colors(commands: &mut Commands, content: Entity, theme: &Theme, mono: &Handle<Font>) {
     // Primitive palette.
     let base = [
         (theme.base_100, "base-100"),
@@ -237,14 +262,14 @@ fn colors(commands: &mut Commands, content: Entity, theme: &Theme) {
     ] {
         let chips: Vec<Entity> = set
             .iter()
-            .map(|(c, name)| swatch(commands, theme, *c, name, &hex(*c)))
+            .map(|(c, name)| swatch(commands, mono, theme, *c, name, &hex(*c)))
             .collect();
-        let g = widgets::group(commands, theme, title, &chips);
+        let g = group(commands, theme, title, &chips);
         commands.entity(content).add_children(&[g]);
     }
 }
 
-fn typography(commands: &mut Commands, content: Entity, theme: &Theme) {
+fn typography(commands: &mut Commands, content: Entity, theme: &Theme, mono: &Handle<Font>) {
     let scale_steps = [
         (scale::font_size::F00, "F00 · 12.8"),
         (scale::font_size::F0, "F0 · 16 (body)"),
@@ -258,20 +283,18 @@ fn typography(commands: &mut Commands, content: Entity, theme: &Theme) {
     let stack = column(commands, scale::space::S);
     for (size, name) in scale_steps {
         let line = row(commands, scale::space::M);
-        let tag = commands
-            .spawn((
-                Node {
-                    width: Val::Px(120.0),
-                    ..default()
-                },
-                Text::new(name),
-                TextFont {
-                    font_size: scale::font_size::F00,
-                    ..default()
-                },
-                TextColor(theme.text_muted()),
-            ))
-            .id();
+        // Digit-bearing scale tags render in DM Mono so the step values align.
+        let tag = mono_label(
+            commands,
+            mono,
+            name,
+            scale::font_size::F00,
+            theme.text_muted(),
+        );
+        commands.entity(tag).insert(Node {
+            width: Val::Px(120.0),
+            ..default()
+        });
         let sample = label(commands, "Arenic", size, theme.text_1());
         commands.entity(line).add_children(&[tag, sample]);
         commands.entity(stack).add_children(&[line]);
@@ -279,7 +302,8 @@ fn typography(commands: &mut Commands, content: Entity, theme: &Theme) {
 
     let note = label(
         commands,
-        "Family: Archivo (sans/display) · weights 100\u{2013}900 · scale ratio \u{2248}1.25",
+        "Family: DM Sans (UI default) · DM Mono (numeric) · weights 100\u{2013}900 · \
+         scale ratio \u{2248}1.25",
         scale::font_size::F00,
         theme.text_muted(),
     );
@@ -287,7 +311,7 @@ fn typography(commands: &mut Commands, content: Entity, theme: &Theme) {
     commands.entity(content).add_children(&[stack]);
 }
 
-fn spacing(commands: &mut Commands, content: Entity, theme: &Theme) {
+fn spacing(commands: &mut Commands, content: Entity, theme: &Theme, mono: &Handle<Font>) {
     let steps = [
         (scale::space::XS3, "3xs · 5"),
         (scale::space::XS2, "2xs · 10"),
@@ -302,20 +326,18 @@ fn spacing(commands: &mut Commands, content: Entity, theme: &Theme) {
     let stack = column(commands, scale::space::XS);
     for (px, name) in steps {
         let line = row(commands, scale::space::S);
-        let tag = commands
-            .spawn((
-                Node {
-                    width: Val::Px(90.0),
-                    ..default()
-                },
-                Text::new(name),
-                TextFont {
-                    font_size: scale::font_size::F00,
-                    ..default()
-                },
-                TextColor(theme.text_muted()),
-            ))
-            .id();
+        // Digit-bearing scale tags render in DM Mono so the step values align.
+        let tag = mono_label(
+            commands,
+            mono,
+            name,
+            scale::font_size::F00,
+            theme.text_muted(),
+        );
+        commands.entity(tag).insert(Node {
+            width: Val::Px(90.0),
+            ..default()
+        });
         let bar = commands
             .spawn((
                 Node {
@@ -371,7 +393,7 @@ fn radii(commands: &mut Commands, content: Entity, theme: &Theme) {
     commands.entity(content).add_children(&[grid]);
 }
 
-fn elevation(commands: &mut Commands, content: Entity, theme: &Theme) {
+fn elevation(commands: &mut Commands, content: Entity, theme: &Theme, mono: &Handle<Font>) {
     // Soft, theme-toned shadows (like the source's text-derived shadows).
     let soft = theme.text_1().with_alpha(0.18);
     let levels = [
@@ -402,7 +424,13 @@ fn elevation(commands: &mut Commands, content: Entity, theme: &Theme) {
                 ),
             ))
             .id();
-        let cap = label(commands, name, scale::font_size::F00, theme.text_muted());
+        let cap = mono_label(
+            commands,
+            mono,
+            name,
+            scale::font_size::F00,
+            theme.text_muted(),
+        );
         commands.entity(col).add_children(&[card, cap]);
         commands.entity(grid).add_children(&[col]);
     }
@@ -429,8 +457,9 @@ fn elevation(commands: &mut Commands, content: Entity, theme: &Theme) {
             ),
         ))
         .id();
-    let nb_cap = label(
+    let nb_cap = mono_label(
         commands,
+        mono,
         "hard 5,5,0",
         scale::font_size::F00,
         theme.text_muted(),
@@ -467,7 +496,6 @@ fn components(commands: &mut Commands, content: Entity, theme: &Theme) {
                     Val::Px(0.0),
                     Val::Px(0.0),
                 ),
-                UiTransform::default(),
                 Interactive::flat(bg, hover, active, theme.focus_ring())
                     .with_shadow(theme.text_1(), 3.0),
                 hidden_outline(),
@@ -570,19 +598,16 @@ fn stage_story(
                 ..default()
             },
             BorderColor::all(theme.border_subtle()),
+            children![(
+                ImageNode::new(stage.clone()),
+                Node {
+                    width: Val::Px(w),
+                    height: Val::Px(h),
+                    ..default()
+                },
+            )],
         ))
         .id();
-    let view = commands
-        .spawn((
-            ImageNode::new(stage.clone()),
-            Node {
-                width: Val::Px(w),
-                height: Val::Px(h),
-                ..default()
-            },
-        ))
-        .id();
-    commands.entity(frame).add_children(&[view]);
 
     commands.entity(content).add_children(&[note, frame]);
 }
