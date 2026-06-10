@@ -36,7 +36,7 @@ use arenic_game::encounter::{ActiveDifficulty, encounter_dir};
 #[cfg(not(target_arch = "wasm32"))]
 use arenic_game::grid::TileMover;
 #[cfg(not(target_arch = "wasm32"))]
-use arenic_game::layer::{ArenaStack, LayerKind, LayerStack, fold_stack, read_stack};
+use arenic_game::layer::{ArenaStack, LayerBinding, LayerKind, LayerStack, fold_stack, read_stack};
 #[cfg(not(target_arch = "wasm32"))]
 use arenic_game::timeline::{ArenaTimeline, Ghost, RecordingLibrary, restart, unfold};
 
@@ -196,7 +196,9 @@ fn sync_scores(
                 // its cached staff goes too ("Replay previous" must never
                 // resurrect a take this difficulty disowned).
                 if let Some((boss_entity, ..)) = boss {
-                    commands.entity(boss_entity).remove::<Ghost>();
+                    commands
+                        .entity(boss_entity)
+                        .remove::<(Ghost, LayerBinding)>();
                     if let Ok((.., mut library, _, _)) = movers.p0().get_mut(boss_entity) {
                         library.0.remove(arena_id);
                     }
@@ -261,22 +263,28 @@ fn apply_stack(
 
     if let Some(boss_entity) = boss {
         match boss_layer {
-            Some((_, recording)) => {
+            Some((layer_id, recording)) => {
                 // The boss's Ghost may be brand new (commands defer), so it is
                 // posed by hand; caching the take makes `R → Replay previous`
-                // work after a discard, exactly like a hero's staff.
+                // work after a discard, exactly like a hero's staff. The
+                // LayerBinding routes the layer's effect tracks to this root.
                 if let Ok((_, _, mut mover, mut transform, mut library, _, _)) =
                     movers.p0().get_mut(boss_entity)
                 {
                     mover.snap_to(&mut transform, recording.start.x, recording.start.y);
                     library.0.insert(arena_id, recording.clone());
                 }
-                commands.entity(boss_entity).insert(Ghost {
-                    start: recording.start,
-                });
+                commands.entity(boss_entity).insert((
+                    Ghost {
+                        start: recording.start,
+                    },
+                    LayerBinding(layer_id),
+                ));
             }
             None => {
-                commands.entity(boss_entity).remove::<Ghost>();
+                commands
+                    .entity(boss_entity)
+                    .remove::<(Ghost, LayerBinding)>();
                 if let Ok((.., mut library, _, _)) = movers.p0().get_mut(boss_entity) {
                     library.0.remove(&arena_id);
                 }

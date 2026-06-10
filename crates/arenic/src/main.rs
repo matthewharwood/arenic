@@ -15,6 +15,7 @@ mod travel;
 use arenic_game::GameAudioPlugin;
 use arenic_game::default_font::DefaultFontPlugin;
 use arenic_game::default_plugins;
+use arenic_game::effect::EffectPlugin;
 use arenic_game::theme::ActiveTheme;
 use arenic_game::timeline::TimelinePlugin;
 use bevy::prelude::*;
@@ -57,6 +58,9 @@ fn main() -> AppExit {
     .add_plugins(RecordingPlugin)
     .add_plugins(TravelPlugin)
     .add_plugins(ScoreSyncPlugin)
+    // Non-destructive layer effects (scale/opacity tracks) — published
+    // stacks animate in the game exactly as previewed in the author.
+    .add_plugins(EffectPlugin)
     .add_plugins(HudPlugin)
     // The camera is the microphone: spatial SFX + crossfading music. The
     // spatial knee sits at the zoomed-in camera height, so the focused arena

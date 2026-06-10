@@ -26,6 +26,7 @@ use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::arena::Arena;
+use crate::effect::EffectTrack;
 use crate::encounter::{Difficulty, ScoreIoError, validate_header};
 use crate::tile_script::TileKeyframe;
 use crate::timeline::{Action, ArenaTimeline, Recording, TimelineEvent, fold};
@@ -73,8 +74,9 @@ pub enum LayerKind {
     Tiles(Vec<TileKeyframe>),
 }
 
-/// One authoring layer. `muted` persists (a published stack remembers it);
-/// `solo`/`locked` are session-side UI state and never serialize.
+/// One authoring layer. `muted` and `effects` persist (a published stack
+/// remembers them); `solo`/`locked` are session-side UI state and never
+/// serialize.
 #[derive(Clone, Debug)]
 pub struct Layer {
     pub id: LayerId,
@@ -83,6 +85,9 @@ pub struct Layer {
     pub muted: bool,
     pub solo: bool,
     pub locked: bool,
+    /// Non-destructive keyframed effects ([`crate::effect`]) applied to the
+    /// layer's bound entity at render time.
+    pub effects: Vec<EffectTrack>,
 }
 
 impl Layer {
@@ -94,9 +99,17 @@ impl Layer {
             muted: false,
             solo: false,
             locked: false,
+            effects: Vec::new(),
         }
     }
 }
+
+/// Marks an entity as the live binding of one layer (inserted at fold time —
+/// the boss root today, minions next). The effect systems resolve a bound
+/// entity's tracks through this.
+#[derive(Component, Clone, Copy, Debug)]
+#[component(immutable)]
+pub struct LayerBinding(pub LayerId);
 
 /// The ordered stack: index 0 = bottom, last = top (the panel renders top
 /// first, AE-style). Fold applies bottom→top so the top layer wins conflicts.
@@ -186,7 +199,14 @@ impl ArenaStack {
     /// `true` while `layer` differs from its published baseline (persisted
     /// fields only — `solo`/`locked` are session UI state).
     pub fn layer_dirty(&self, id: LayerId) -> bool {
-        let persisted = |layer: &Layer| (layer.name.clone(), layer.muted, layer.kind.clone());
+        let persisted = |layer: &Layer| {
+            (
+                layer.name.clone(),
+                layer.muted,
+                layer.kind.clone(),
+                layer.effects.clone(),
+            )
+        };
         match (self.stack.layer(id), self.published.layer(id)) {
             (Some(draft), Some(baseline)) => persisted(draft) != persisted(baseline),
             (None, None) => false,
@@ -319,6 +339,8 @@ pub struct LayerDto {
     pub name: String,
     #[serde(default)]
     pub muted: bool,
+    #[serde(default)]
+    pub effects: Vec<EffectTrack>,
     pub kind: LayerKindDto,
 }
 
@@ -344,6 +366,7 @@ impl LayerScoreFile {
                     id: layer.id.0,
                     name: layer.name.clone(),
                     muted: layer.muted,
+                    effects: layer.effects.clone(),
                     kind: match &layer.kind {
                         LayerKind::Boss(recording) => {
                             LayerKindDto::Boss(RecordingDto::from_recording(recording))
@@ -373,6 +396,7 @@ impl LayerScoreFile {
                     muted: dto.muted,
                     solo: false,
                     locked: false,
+                    effects: dto.effects.clone(),
                     kind: match &dto.kind {
                         LayerKindDto::Boss(recording) => LayerKind::Boss(recording.recording()),
                         LayerKindDto::Minion {
