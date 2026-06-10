@@ -20,6 +20,7 @@
 
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_8};
 
+use arenic_game::Boss;
 use arenic_game::ability::{AbilityMeshes, AbilityPlugin, AbilitySfx, cast_holy_nova};
 use arenic_game::arena::{Arena, PropSpec};
 use arenic_game::atmosphere::{AtmospherePlugin, CloudFog, Plane, cloud_material};
@@ -50,12 +51,16 @@ use crate::modal::no_modal;
 use crate::recording::{
     DraftTimeline, RecordingState, is_idle, no_pending_walk, not_counting_down,
 };
-use crate::states::AppState;
+use crate::states::{AppState, not_tile_editing};
 
 /// The Guild House — arena index 1 (top row, middle column); home of the puck.
 const GUILD_HOUSE: usize = 1;
 /// Arena 4 (centre of the 3×3 grid) — the overworld zoom-out re-centres here.
 const OVERWORLD: usize = 4;
+/// The tile every combat boss rests on until a score moves it — the cell
+/// nearest the arena centre.
+const BOSS_COL: i32 = 33;
+const BOSS_ROW: i32 = 15;
 /// (zoomed-in z, zoomed-out z) camera distances — straight from the reference repo
 /// (`ZOOM = (24, 72)`). Matching them keeps the HUD's local-space framing aligned
 /// with the game's global gamespace; the HUD's side/top/bottom chrome masks the
@@ -87,9 +92,11 @@ pub(crate) struct CurrentArena(pub(crate) usize);
 pub(crate) struct ZoomOut;
 
 /// A guildmaster puck's index in the Guild House — `Tab` cycles selection by it.
+/// `pub(crate)` so the author feature can hand `Selected` back to puck 0 when a
+/// boss is released.
 #[derive(Component)]
 #[component(immutable)]
-struct Puck(usize);
+pub(crate) struct Puck(pub(crate) usize);
 
 /// Marks the currently-selected puck: it moves with the arrows, casts abilities, and
 /// wears the selection ring. Exactly one puck has this at a time — recording
@@ -125,19 +132,24 @@ impl Plugin for IntroScenePlugin {
                 Update,
                 (
                     // World input gates off while a modal is open, a recording
-                    // countdown holds the arena (RULEBOOK → Modal Controls), or
-                    // a confirmed edge-walk is one frame from landing.
+                    // countdown holds the arena (RULEBOOK → Modal Controls), a
+                    // confirmed edge-walk is one frame from landing, or the
+                    // author tile editor owns the keys.
                     fire_holy_nova.run_if(
                         input_just_pressed(KeyCode::Digit1)
                             .or(input_just_pressed(KeyCode::Numpad1))
                             .and(no_modal)
                             .and(not_counting_down)
-                            .and(no_pending_walk),
+                            .and(no_pending_walk)
+                            .and(not_tile_editing),
                     ),
                     toggle_zoom.run_if(input_just_pressed(KeyCode::KeyP)),
+                    // Pagination yields to the tile editor too — its cursor and
+                    // scrub target are pinned to the arena it opened on.
                     paginate.run_if(
                         input_just_pressed(KeyCode::BracketLeft)
-                            .or(input_just_pressed(KeyCode::BracketRight)),
+                            .or(input_just_pressed(KeyCode::BracketRight))
+                            .and(not_tile_editing),
                     ),
                     refocus_camera.run_if(resource_changed::<CurrentArena>),
                     // L mutates the board, which restart() can't rewind — idle only,
@@ -146,7 +158,8 @@ impl Plugin for IntroScenePlugin {
                         input_just_pressed(KeyCode::KeyL)
                             .and(no_modal)
                             .and(is_idle)
-                            .and(no_pending_walk),
+                            .and(no_pending_walk)
+                            .and(not_tile_editing),
                     ),
                     // Tab is ignored while recording — the staff belongs to whoever
                     // started it (RULEBOOK → Recording Interruptions) — and while a
@@ -155,7 +168,8 @@ impl Plugin for IntroScenePlugin {
                         input_just_pressed(KeyCode::Tab)
                             .and(no_modal)
                             .and(is_idle)
-                            .and(no_pending_walk),
+                            .and(no_pending_walk)
+                            .and(not_tile_editing),
                     ),
                     // Arrow movement + edge-walking live in `crate::travel`.
                     follow_selected,
@@ -437,9 +451,12 @@ fn spawn_swarm(
     }
 }
 
-/// Spawns an arena's boss: the Guild House home pyramid, or a dark hollow shell + an
-/// emissive core (driven by [`animate_boss_cores`]). §5: rotate +90° about X so the
-/// authored (Y-up) shell faces the camera.
+/// Spawns an arena's boss: the Guild House home pyramid, or — for combat arenas
+/// — a **movable boss root** (a [`Boss`] + `TileMover`, recorded and replayed
+/// exactly like a hero) wearing the dark hollow shell + emissive core (driven
+/// by [`animate_boss_cores`]) as children. §5: rotate the shell +90° about X so
+/// the authored (Y-up) glTF faces the camera; the root itself stays unrotated
+/// so the core's light offsets keep their board-space axes.
 fn spawn_boss(
     commands: &mut Commands,
     assets: &AssetServer,
@@ -451,9 +468,10 @@ fn spawn_boss(
     theme: &Theme,
 ) {
     let face_camera = Quat::from_rotation_x(FRAC_PI_2);
-    let at_center = Transform::from_xyz(center.x, center.y, 0.02).with_rotation(face_camera);
     match boss {
         BossSpec::Home { .. } => {
+            let at_center =
+                Transform::from_xyz(center.x, center.y, 0.02).with_rotation(face_camera);
             commands.spawn((boss_a(assets), at_center, ChildOf(arena)));
         }
         BossSpec::Hollow {
@@ -463,27 +481,41 @@ fn spawn_boss(
             behavior,
             color,
         } => {
-            // Dark shell (its authored glTF material is already near-black).
-            commands.spawn((shell.scene(assets), at_center, ChildOf(arena)));
-            // Emissive core — baked to this arena's colour, animated.
             let baked = color(theme);
             let l = baked.to_linear();
-            let rest = Transform::from_xyz(center.x, center.y, core_z);
+            // The core's rest pose is LOCAL to the boss root now.
+            let rest = Transform::from_xyz(0.0, 0.0, core_z);
+            let start = tile_to_world(BOSS_COL, BOSS_ROW);
             commands.spawn((
-                Mesh3d(meshes.add(core.to_mesh())),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::srgb(0.02, 0.02, 0.03),
-                    emissive: LinearRgba::rgb(l.red, l.green, l.blue) * BOSS_EMISSIVE,
-                    perceptual_roughness: 1.0,
-                    ..default()
-                })),
-                rest,
-                BossCore {
-                    behavior,
-                    rest,
-                    color: baked,
-                },
+                Boss,
+                TileMover::new(BOSS_COL, BOSS_ROW),
+                RecordingLibrary::default(),
+                Transform::from_xyz(start.x, start.y, 0.0),
+                Visibility::default(),
                 ChildOf(arena),
+                children![
+                    // Dark shell (its authored glTF material is already near-black).
+                    (
+                        shell.scene(assets),
+                        Transform::from_xyz(0.0, 0.0, 0.02).with_rotation(face_camera),
+                    ),
+                    // Emissive core — baked to this arena's colour, animated.
+                    (
+                        Mesh3d(meshes.add(core.to_mesh())),
+                        MeshMaterial3d(materials.add(StandardMaterial {
+                            base_color: Color::srgb(0.02, 0.02, 0.03),
+                            emissive: LinearRgba::rgb(l.red, l.green, l.blue) * BOSS_EMISSIVE,
+                            perceptual_roughness: 1.0,
+                            ..default()
+                        })),
+                        rest,
+                        BossCore {
+                            behavior,
+                            rest,
+                            color: baked,
+                        },
+                    ),
+                ],
             ));
         }
     }

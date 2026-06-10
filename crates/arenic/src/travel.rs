@@ -4,6 +4,7 @@
 //! the scene owns what the world *is*; this module owns how the selected hero
 //! *moves through it* (RULEBOOK → Travel: Leaving and Returning).
 
+use arenic_game::Boss;
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
 use arenic_game::grid::{MAX_COL, MAX_ROW, TileMover, arrow_delta, arrow_pressed};
@@ -13,14 +14,15 @@ use bevy::prelude::*;
 use crate::intro_scene::{CurrentArena, Selected};
 use crate::modal::{Choice, ModalLatch, no_modal, spawn_modal};
 use crate::recording::{DraftTimeline, PendingWalk, RecordingState, is_idle, not_counting_down};
-use crate::states::AppState;
+use crate::states::{AppState, not_tile_editing};
 
 /// Moves the SELECTED puck one tile per arrow-key press. Only the selected puck
 /// responds — the others hold position. Three special cases (RULEBOOK):
 /// a selected **ghost** never moves — an arrow press opens the *Break out?* modal;
 /// stepping past the arena edge **while recording** opens the *Like the
 /// recording?* interrupt modal; the same step while idle **edge-walks** into the
-/// adjacent arena.
+/// adjacent arena. A possessed [`Boss`] never edge-walks at all — its arena IS
+/// its world, so an edge step clamps exactly like the outer border.
 fn move_selected(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
@@ -35,6 +37,7 @@ fn move_selected(
             &mut Transform,
             &ChildOf,
             Has<Ghost>,
+            Has<Boss>,
             &RecordingLibrary,
         ),
         With<Selected>,
@@ -44,7 +47,8 @@ fn move_selected(
     mut current: ResMut<CurrentArena>,
 ) -> Result {
     let delta = arrow_delta(&keys);
-    let (hero, mut mover, mut transform, child_of, is_ghost, library) = selected.into_inner();
+    let (hero, mut mover, mut transform, child_of, is_ghost, is_boss, library) =
+        selected.into_inner();
     let arena_entity = child_of.parent();
     let (_, arena) = arena_roots.get(arena_entity)?;
     let recording = matches!(*state, RecordingState::Recording);
@@ -72,7 +76,7 @@ fn move_selected(
 
     let target = IVec2::new(mover.col.strict_add(delta.x), mover.row.strict_add(delta.y));
     let inside = (0..=MAX_COL).contains(&target.x) && (0..=MAX_ROW).contains(&target.y);
-    let crossing = if inside {
+    let crossing = if inside || is_boss {
         None
     } else {
         adjacent_entry(arena.index(), mover.col, mover.row, delta)
@@ -256,12 +260,14 @@ impl Plugin for TravelPlugin {
             (
                 // A live PendingWalk suppresses arrow movement for the one frame
                 // perform_pending_walk needs — otherwise both could move the hero
-                // in the same frame off a stale ChildOf.
+                // in the same frame off a stale ChildOf. The author tile editor
+                // borrows the arrows for its cursor while open.
                 move_selected.run_if(
                     arrow_pressed
                         .and(no_modal)
                         .and(not_counting_down)
-                        .and(not(resource_exists::<PendingWalk>)),
+                        .and(not(resource_exists::<PendingWalk>))
+                        .and(not_tile_editing),
                 ),
                 perform_pending_walk
                     .run_if(resource_exists::<PendingWalk>.and(no_modal).and(is_idle)),

@@ -7,5 +7,12 @@ edition.workspace = true
 bevy.workspace = true
 arenic_game.workspace = true
 
+[features]
+# In-game authoring tools (`just author`): possess + record bosses, the tile
+# choreography editor, versioned score-file writing. Off by default — the
+# plain game, release, and web builds never enable it, so author mode does
+# not ship.
+author = []
+
 [lints]
 workspace = true

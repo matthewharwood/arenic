@@ -17,6 +17,7 @@ pub mod arena;
 pub mod atmosphere;
 pub mod boss;
 pub mod default_font;
+pub mod encounter;
 pub mod grid;
 pub mod guildmaster;
 pub mod icon;
@@ -25,9 +26,13 @@ pub mod orbit;
 pub mod swarm;
 pub mod theme;
 pub mod tile;
+pub mod tile_script;
 pub mod timeline;
 pub mod ui;
 
+pub use ability::AbilityId;
+pub use boss::Boss;
+pub use encounter::{ActiveDifficulty, Difficulty};
 pub use interaction::{InteractionPlugin, Interactive, UiFocus, hidden_outline};
 
 use bevy::app::PluginGroupBuilder;

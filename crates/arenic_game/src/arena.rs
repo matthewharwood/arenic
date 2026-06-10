@@ -72,6 +72,23 @@ impl Arena {
         }
     }
 
+    /// The arena's kebab-case slug — its directory name under
+    /// `assets/encounters/` (see [`crate::encounter`]). Derived from [`Self::name`],
+    /// pinned here so a display-name tweak can't silently orphan score files.
+    pub fn slug(self) -> &'static str {
+        match self {
+            Arena::Hunter => "labyrinth",
+            Arena::Guildmaster => "guild-house",
+            Arena::Cardinal => "sanctum",
+            Arena::Forager => "mountain",
+            Arena::Warrior => "bastion",
+            Arena::Thief => "pawnshop",
+            Arena::Alchemist => "crucible",
+            Arena::Merchant => "casino",
+            Arena::Bard => "gala",
+        }
+    }
+
     /// The theme this arena wears.
     pub fn theme(self) -> ThemeId {
         match self {
@@ -408,6 +425,22 @@ mod tests {
             assert_eq!(Arena::from_index(i), Some(arena));
         }
         assert_eq!(Arena::from_index(9), None);
+    }
+
+    #[test]
+    fn slugs_match_names_and_are_path_safe() {
+        for arena in Arena::ALL {
+            let expected = arena.name().to_lowercase().replace(' ', "-");
+            assert_eq!(arena.slug(), expected, "slug drifted from name");
+            assert!(
+                arena
+                    .slug()
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '-'),
+                "slug {} is not path-safe",
+                arena.slug()
+            );
+        }
     }
 
     #[test]

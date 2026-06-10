@@ -7,8 +7,6 @@
 //! Character Query Pattern). Every modal decision lands here in [`handle_choice`],
 //! the single, idempotent place state transitions are applied.
 
-use std::f32::consts::FRAC_PI_2;
-
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
 use arenic_game::grid::TileMover;
@@ -26,7 +24,7 @@ use crate::intro_scene::{CurrentArena, Selected};
 use crate::modal::{
     ActiveModal, Choice, ModalChoice, ModalLatch, ModalRoot, no_modal, spawn_modal,
 };
-use crate::states::AppState;
+use crate::states::{AppState, not_tile_editing};
 
 /// The one in-flight recording. `Countdown` holds the recording arena at tick 0
 /// for 3 seconds; `Recording` captures until the player commits/discards or the
@@ -53,6 +51,18 @@ pub(crate) struct DraftTimeline {
 /// `travel::perform_pending_walk`; every other choice clears it.
 #[derive(Resource)]
 pub(crate) struct PendingWalk(pub(crate) IVec2);
+
+/// Written once per Commit — the seam the author feature listens on to mirror
+/// a boss's committed staff into a versioned score file. The plain game build
+/// writes it and nobody reads it (the buffer just drains), so the fields look
+/// dead there.
+#[derive(Message)]
+#[cfg_attr(not(feature = "author"), allow(dead_code))]
+pub(crate) struct RecordingCommitted {
+    pub(crate) entity: Entity,
+    pub(crate) arena: u8,
+    pub(crate) recording: Recording,
+}
 
 /// Marks the blue ring child a [`Ghost`] wears (see [`ghost_ring_add`]).
 #[derive(Component)]
@@ -326,6 +336,7 @@ fn auto_stop(
 fn handle_choice(
     mut commands: Commands,
     mut choices: MessageReader<ModalChoice>,
+    mut commits: MessageWriter<RecordingCommitted>,
     mut state: ResMut<RecordingState>,
     mut draft: ResMut<DraftTimeline>,
     mut heroes: ParamSet<(
@@ -404,6 +415,11 @@ fn handle_choice(
                     &mut mover,
                     &mut transform,
                 );
+                commits.write(RecordingCommitted {
+                    entity: hero,
+                    arena: arena.index() as u8,
+                    recording,
+                });
             }
             snap_arena_ghosts(arena_entity, &mut heroes.p1(), None);
         }
@@ -459,14 +475,22 @@ fn handle_choice(
 
 /// Dresses a fresh [`Ghost`] in its blue ring — the sibling of the white
 /// selection halo (same `Annulus` recipe, ghost-blue, slightly wider so the two
-/// read concentrically on a selected ghost). Parented to the puck, so it follows
-/// playback; the puck is X-rotated 90°, so the ring counter-rotates to lie flat.
+/// read concentrically on a selected ghost). Parented to the wearer, so it
+/// follows playback. Wearers differ in pose — a puck is X-rotated 90°, a boss
+/// root is not — so the ring counter-rotates by the parent's inverse to lie
+/// flat, parked just above the board (`z = 0.03` world) whatever the parent's
+/// own height.
 fn ghost_ring_add(
     add: On<Add, Ghost>,
     mut commands: Commands,
+    transforms: Query<&Transform>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let (inverse, lift) = transforms
+        .get(add.entity)
+        .map(|t| (t.rotation.inverse(), 0.03 - t.translation.z))
+        .unwrap_or((Quat::IDENTITY, 0.0));
     let blue = Color::srgb(0.35, 0.55, 1.0);
     let l = blue.to_linear();
     commands.spawn((
@@ -477,7 +501,7 @@ fn ghost_ring_add(
             emissive: LinearRgba::rgb(l.red, l.green, l.blue) * 2.5,
             ..default()
         })),
-        Transform::from_xyz(0.0, -0.02, 0.0).with_rotation(Quat::from_rotation_x(-FRAC_PI_2)),
+        Transform::from_translation(inverse * Vec3::new(0.0, 0.0, lift)).with_rotation(inverse),
         NotShadowCaster,
         NotShadowReceiver,
         ChildOf(add.entity),
@@ -627,6 +651,7 @@ impl Plugin for RecordingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RecordingState>()
             .init_resource::<DraftTimeline>()
+            .add_message::<RecordingCommitted>()
             .add_observer(ghost_ring_add)
             .add_observer(ghost_ring_remove)
             .add_systems(OnEnter(AppState::Intro), setup_rec_hud)
@@ -637,7 +662,8 @@ impl Plugin for RecordingPlugin {
                     handle_r_key.run_if(
                         input_just_pressed(KeyCode::KeyR)
                             .and(no_modal)
-                            .and(no_pending_walk),
+                            .and(no_pending_walk)
+                            .and(not_tile_editing),
                     ),
                     capture_intent.run_if(is_recording.and(no_modal)),
                     // Gated on a pending message: the heavy ParamSet (and its

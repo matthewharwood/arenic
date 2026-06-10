@@ -13,6 +13,10 @@ bevy = { version = "0.18.1", features = ["ui_picking"] }
 # The shared game crate. Both binaries (the game and the storybook) depend on it;
 # it never depends on them, so game pieces live here and are reused, not copied.
 arenic_game = { path = "crates/arenic_game" }
+# Serialization for the versioned encounter score files (`arenic_game::encounter`).
+# The same versions Bevy already locks, so they add no duplicate builds.
+serde = { version = "1", features = ["derive"] }
+ron = "0.12"
 
 # Workspace-wide lint config. Each crate opts in with `[lints] workspace = true`.
 # These two clippy lints fire constantly on idiomatic Bevy systems — big `Query`

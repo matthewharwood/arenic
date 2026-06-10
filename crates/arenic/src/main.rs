@@ -1,7 +1,12 @@
+// Author mode (`just author`) is a cargo feature that never ships: the plain
+// game, release, and web builds compile none of it.
+#[cfg(all(feature = "author", not(target_arch = "wasm32")))]
+mod author;
 mod hud;
 mod intro_scene;
 mod modal;
 mod recording;
+mod score_sync;
 mod states;
 mod title_screen;
 mod travel;
@@ -16,35 +21,41 @@ use hud::HudPlugin;
 use intro_scene::IntroScenePlugin;
 use modal::ModalPlugin;
 use recording::RecordingPlugin;
+use score_sync::ScoreSyncPlugin;
 use states::AppState;
 use title_screen::TitleScreenPlugin;
 use travel::TravelPlugin;
 
 fn main() -> AppExit {
-    App::new()
-        // Pin the framebuffer to 1280×720 PHYSICAL px (UNITS_AND_SCALE §2), so the
-        // camera's ~75 px/unit (1 tile ≈ 19 px) holds regardless of monitor DPI.
-        .add_plugins(default_plugins().set(WindowPlugin {
-            primary_window: Some(Window {
-                resolution: WindowResolution::new(1280, 720),
-                title: "Arenic".into(),
-                ..default()
-            }),
+    let mut app = App::new();
+    // Pin the framebuffer to 1280×720 PHYSICAL px (UNITS_AND_SCALE §2), so the
+    // camera's ~75 px/unit (1 tile ≈ 19 px) holds regardless of monitor DPI.
+    app.add_plugins(default_plugins().set(WindowPlugin {
+        primary_window: Some(Window {
+            resolution: WindowResolution::new(1280, 720),
+            title: "Arenic".into(),
             ..default()
-        }))
-        // Must come after DefaultPlugins so it overwrites Bevy's built-in default font.
-        .add_plugins(DefaultFontPlugin)
-        .init_state::<AppState>()
-        .init_resource::<ActiveTheme>()
-        .add_plugins(TitleScreenPlugin)
-        .add_plugins(IntroScenePlugin)
-        // The sheet-music sim: TimelinePlugin pins the 60 Hz fixed timestep and
-        // replays every arena's master timeline; Modal + Recording layer the
-        // keyboard-first capture/commit flows on top (`_docs/RULEBOOK.md`).
-        .add_plugins(TimelinePlugin)
-        .add_plugins(ModalPlugin)
-        .add_plugins(RecordingPlugin)
-        .add_plugins(TravelPlugin)
-        .add_plugins(HudPlugin)
-        .run()
+        }),
+        ..default()
+    }))
+    // Must come after DefaultPlugins so it overwrites Bevy's built-in default font.
+    .add_plugins(DefaultFontPlugin)
+    .init_state::<AppState>()
+    .init_resource::<ActiveTheme>()
+    .add_plugins(TitleScreenPlugin)
+    .add_plugins(IntroScenePlugin)
+    // The sheet-music sim: TimelinePlugin pins the 60 Hz fixed timestep and
+    // replays every arena's master timeline; Modal + Recording layer the
+    // keyboard-first capture/commit flows on top (`_docs/RULEBOOK.md`);
+    // ScoreSync folds the versioned boss/tile score files in and tracks the
+    // newest version at every cycle wrap.
+    .add_plugins(TimelinePlugin)
+    .add_plugins(ModalPlugin)
+    .add_plugins(RecordingPlugin)
+    .add_plugins(TravelPlugin)
+    .add_plugins(ScoreSyncPlugin)
+    .add_plugins(HudPlugin);
+    #[cfg(all(feature = "author", not(target_arch = "wasm32")))]
+    app.add_plugins(author::AuthorPlugin);
+    app.run()
 }

@@ -18,6 +18,15 @@ use crate::theme::Tint;
 #[component(immutable)]
 pub struct BossA;
 
+/// Marks an arena's **movable boss root** — the entity that carries the boss's
+/// `TileMover` and gets recorded/replayed like any other character (its shell +
+/// core visuals hang off it as children). Playback resolves this entity's
+/// `Action::Ability(slot)` events through the boss phase loadout
+/// ([`crate::encounter::loadout`]) instead of the hero slots.
+#[derive(Component, Debug, Clone, Copy)]
+#[component(immutable)]
+pub struct Boss;
+
 /// glTF scene path for the pyramid (Bevy labels the first scene `#Scene0`).
 pub const MODEL: &str = "models/boss_a.glb#Scene0";
 
