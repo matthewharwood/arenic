@@ -15,7 +15,8 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::encounter::Difficulty;
+use crate::arena::Arena;
+use crate::encounter::{Difficulty, ScoreIoError, validate_header};
 use crate::grid::{GRID_H, GRID_W, MAX_COL, MAX_ROW};
 use crate::tile::TileKind;
 use crate::timeline::TICKS_PER_SECOND;
@@ -69,14 +70,34 @@ pub struct TileScriptFile {
     pub keyframes: Vec<TileKeyframe>,
 }
 
+impl TileScriptFile {
+    /// Rejects a header the reader can't trust — same contract as
+    /// [`crate::encounter::BossScoreFile::validate`].
+    pub fn validate(&self, arena: Arena, difficulty: Difficulty) -> Result<(), ScoreIoError> {
+        validate_header(self.format, self.arena, self.difficulty, arena, difficulty)
+    }
+}
+
+/// Bookkeeping for one cell a [`TileScript`] currently holds: the scripted
+/// `kind` it wears, and the `prior` kind it wore before the script claimed it —
+/// restored when the script lets go, so a manually-flipped tile is never the
+/// script's to undo.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct AppliedCell {
+    pub kind: TileKind,
+    pub prior: TileKind,
+}
+
 /// An arena root's live tile script: the keyframes driving its board, plus the
-/// cells the script currently holds away from `Normal` (bookkeeping so the
-/// applier can revert exactly what it touched — and nothing else, e.g. not a
-/// manually-lava'd tile).
+/// cells the script currently holds (with what they wore before, so the applier
+/// can revert exactly what it touched — and nothing else). `dirty` marks
+/// keyframes edited in the author tool since the last save/load; an unsaved
+/// script is never overwritten by the score sync.
 #[derive(Component, Default)]
 pub struct TileScript {
     pub keyframes: Vec<TileKeyframe>,
-    pub applied: HashMap<(u8, u8), TileKind>,
+    pub applied: HashMap<(u8, u8), AppliedCell>,
+    pub dirty: bool,
 }
 
 /// The cells `selector` covers `ticks_in` ticks after its keyframe began.
@@ -262,6 +283,24 @@ mod tests {
             },
         ];
         assert_eq!(desired(&layered, 50)[&(2, 2)], TileKind::Normal);
+    }
+
+    #[test]
+    fn readers_reject_foreign_headers() {
+        let file = TileScriptFile {
+            format: crate::encounter::SCORE_FORMAT,
+            arena: Arena::Hunter.index() as u8,
+            difficulty: Difficulty::Heroic,
+            keyframes: vec![],
+        };
+        assert!(file.validate(Arena::Hunter, Difficulty::Heroic).is_ok());
+        assert!(file.validate(Arena::Bard, Difficulty::Heroic).is_err());
+        assert!(file.validate(Arena::Hunter, Difficulty::Normal).is_err());
+        let newer = TileScriptFile {
+            format: crate::encounter::SCORE_FORMAT + 1,
+            ..file
+        };
+        assert!(newer.validate(Arena::Hunter, Difficulty::Heroic).is_err());
     }
 
     #[test]

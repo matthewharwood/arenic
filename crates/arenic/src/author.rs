@@ -3,9 +3,10 @@
 //!
 //! - **`B`** possesses / releases the current arena's [`Boss`]: `Selected`
 //!   moves onto the boss root, and from there the ENTIRE hero flow applies
-//!   unchanged — arrows step it, `1` casts, `R` records its 2-minute staff,
-//!   Commit folds it back in as a ghost. The one extra step is here:
-//!   a committed boss staff is mirrored to a versioned
+//!   unchanged — arrows step it, `1`-`4` cast its phase-loadout slots
+//!   ([`boss_cast_slots`] live-casts exactly what playback will resolve),
+//!   `R` records its 2-minute staff, Commit folds it back in as a ghost. The
+//!   one extra step is here: a committed boss staff is mirrored to a versioned
 //!   `assets/encounters/<arena>/<difficulty>/boss.vNNNN.ron` score file.
 //! - **`D`** cycles the [`ActiveDifficulty`] — each difficulty owns its own
 //!   timelines, so this re-points every arena at that difficulty's files.
@@ -22,11 +23,12 @@
 //! to git, so history is the second level of undo).
 
 use arenic_game::Boss;
+use arenic_game::ability::{AbilityMeshes, AbilitySfx, cast};
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
 use arenic_game::encounter::{
     ActiveDifficulty, BOSS_PREFIX, BossScoreFile, Difficulty, SCORE_FORMAT, encounter_dir,
-    write_versioned_ron,
+    resolve_ability, write_versioned_ron,
 };
 use arenic_game::grid::{MAX_COL, MAX_ROW, TileMover, arrow_delta, arrow_pressed, tile_to_world};
 use arenic_game::tile::TileKind;
@@ -35,7 +37,6 @@ use arenic_game::tile_script::{
 };
 use arenic_game::timeline::{
     Action, ArenaClock, ArenaTimeline, CYCLE_TICKS, Ghost, TICKS_PER_SECOND, restart, seek_window,
-    snap_ghost,
 };
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
@@ -44,7 +45,9 @@ use bevy::prelude::*;
 use crate::hud::TOP_BAR_PX;
 use crate::intro_scene::{CurrentArena, Puck, Selected};
 use crate::modal::no_modal;
-use crate::recording::{RecordingCommitted, is_idle, no_pending_walk};
+use crate::recording::{
+    RecordingCommitted, fmt_tick, is_idle, no_pending_walk, not_counting_down, snap_arena_ghosts,
+};
 use crate::score_sync::LoadedScores;
 use crate::states::{AppState, TileEditMode, not_tile_editing};
 
@@ -117,10 +120,54 @@ fn possess_boss(
 }
 
 /// `D` — cycle the authoring difficulty. `score_sync` notices the change and
-/// re-points every arena at that difficulty's score files.
-fn cycle_difficulty(mut difficulty: ResMut<ActiveDifficulty>) {
+/// re-points every arena at that difficulty's score files — which would
+/// clobber unsaved tile keyframes, so a dirty script blocks the swap until
+/// it's saved (`W`).
+fn cycle_difficulty(
+    mut difficulty: ResMut<ActiveDifficulty>,
+    scripts: Query<(&Arena, &TileScript)>,
+) {
+    if let Some((arena, _)) = scripts.iter().find(|(_, script)| script.dirty) {
+        warn!(
+            "{}: unsaved tile edits — press W before switching difficulty",
+            arena.name()
+        );
+        return;
+    }
     difficulty.0 = difficulty.0.next();
     info!("authoring difficulty: {:?}", difficulty.0);
+}
+
+/// `2`-`4` — live-cast a possessed boss's loadout slots, resolved exactly as
+/// playback will resolve them ([`resolve_ability`] at the current tick), so the
+/// rehearsed take can never disagree with the committed staff. Slot 1 is the
+/// shared hero path (`intro_scene::fire_holy_nova`); the draft event itself is
+/// captured by `recording::capture_intent` in the same frame.
+fn boss_cast_slots(
+    mut commands: Commands,
+    keys: Res<ButtonInput<KeyCode>>,
+    difficulty: Res<ActiveDifficulty>,
+    boss: Single<(Entity, &ChildOf), (With<Selected>, With<Boss>, Without<Ghost>)>,
+    arenas: Query<(&Arena, &ArenaClock)>,
+    meshes: Res<AbilityMeshes>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    sfx: Res<AbilitySfx>,
+) -> Result {
+    let (boss, child_of) = *boss;
+    let (arena, clock) = arenas.get(child_of.parent())?;
+    const SLOTS: [(KeyCode, KeyCode, u8); 3] = [
+        (KeyCode::Digit2, KeyCode::Numpad2, 2),
+        (KeyCode::Digit3, KeyCode::Numpad3, 3),
+        (KeyCode::Digit4, KeyCode::Numpad4, 4),
+    ];
+    for (digit, numpad, slot) in SLOTS {
+        if (keys.just_pressed(digit) || keys.just_pressed(numpad))
+            && let Some(id) = resolve_ability(true, *arena, difficulty.0, slot, clock.tick)
+        {
+            cast(&mut commands, id, &meshes, &mut materials, &sfx, boss);
+        }
+    }
+    Ok(())
 }
 
 /// Mirrors a committed BOSS staff to the next versioned score file (hero
@@ -137,13 +184,12 @@ fn mirror_boss_commits(
         if bosses.get(commit.entity).is_err() {
             continue;
         }
-        let Some(arena) = Arena::from_index(commit.arena as usize) else {
-            continue;
-        };
+        let arena = commit.arena;
         let file = BossScoreFile::from_recording(arena, difficulty.0, &commit.recording);
         match write_versioned_ron(&encounter_dir(arena, difficulty.0), BOSS_PREFIX, &file) {
             Ok((version, path)) => {
-                loaded.0.entry(commit.arena).or_default().boss = Some((difficulty.0, version));
+                loaded.0.entry(arena.index() as u8).or_default().boss =
+                    Some((difficulty.0, version));
                 info!(
                     "{}: boss score v{version} written ({})",
                     arena.name(),
@@ -240,7 +286,7 @@ fn scrub(
     keys: Res<ButtonInput<KeyCode>>,
     current: Res<CurrentArena>,
     mut arenas: Query<(Entity, &Arena, &mut ArenaClock, &mut ArenaTimeline)>,
-    mut ghosts: Query<(&Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
+    mut ghosts: Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
 ) {
     let dir = (keys.just_pressed(KeyCode::Period) as i64)
         .strict_sub(keys.just_pressed(KeyCode::Comma) as i64);
@@ -258,11 +304,7 @@ fn scrub(
     let target = (clock.tick as i64)
         .strict_add(dir.strict_mul(step))
         .clamp(0, CYCLE_TICKS.strict_sub(1) as i64) as u32;
-    for (ghost, child_of, mut mover, mut transform) in ghosts.iter_mut() {
-        if child_of.parent() == arena_entity {
-            snap_ghost(ghost, &mut mover, &mut transform);
-        }
-    }
+    snap_arena_ghosts(arena_entity, &mut ghosts, None);
     let (window, cursor) = seek_window(&timeline.events, target);
     for event in window {
         if let Action::Move(delta) = event.action
@@ -335,11 +377,13 @@ fn paint(
             if script.keyframes.len() == before {
                 script.keyframes.push(keyframe);
             }
+            script.dirty = true;
         }
         None => {
             commands.entity(arena_entity).insert(TileScript {
                 keyframes: vec![keyframe],
                 applied: default(),
+                dirty: true,
             });
         }
     }
@@ -351,9 +395,12 @@ fn write_tiles(
     current: Res<CurrentArena>,
     difficulty: Res<ActiveDifficulty>,
     mut loaded: ResMut<LoadedScores>,
-    arenas: Query<(&Arena, &TileScript)>,
+    mut arenas: Query<(&Arena, &mut TileScript)>,
 ) {
-    let Some((arena, script)) = arenas.iter().find(|(arena, _)| arena.index() == current.0) else {
+    let Some((arena, mut script)) = arenas
+        .iter_mut()
+        .find(|(arena, _)| arena.index() == current.0)
+    else {
         return;
     };
     let file = TileScriptFile {
@@ -364,6 +411,7 @@ fn write_tiles(
     };
     match write_versioned_ron(&encounter_dir(*arena, difficulty.0), TILES_PREFIX, &file) {
         Ok((version, path)) => {
+            script.dirty = false;
             loaded.0.entry(arena.index() as u8).or_default().tiles = Some((difficulty.0, version));
             info!(
                 "{}: tile script v{version} written ({})",
@@ -380,7 +428,7 @@ fn write_tiles(
 fn restart_current(
     current: Res<CurrentArena>,
     mut arenas: Query<(Entity, &Arena, &mut ArenaClock, &mut ArenaTimeline)>,
-    mut ghosts: Query<(&Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
+    mut ghosts: Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
 ) {
     let Some((arena_entity, _, mut clock, mut timeline)) = arenas
         .iter_mut()
@@ -389,17 +437,7 @@ fn restart_current(
         return;
     };
     restart(&mut clock, &mut timeline);
-    for (ghost, child_of, mut mover, mut transform) in ghosts.iter_mut() {
-        if child_of.parent() == arena_entity {
-            snap_ghost(ghost, &mut mover, &mut transform);
-        }
-    }
-}
-
-/// `m:ss` of a cycle tick — the HUD's mark display.
-fn fmt_tick(tick: u32) -> String {
-    let secs = tick / TICKS_PER_SECOND;
-    format!("{}:{:02}", secs / 60, secs % 60)
+    snap_arena_ghosts(arena_entity, &mut ghosts, None);
 }
 
 /// The author chip, top-right under the bar — a sibling of the REC strip.
@@ -509,6 +547,18 @@ impl Plugin for AuthorPlugin {
                             .and(is_idle)
                             .and(not_tile_editing),
                     ),
+                    boss_cast_slots.run_if(
+                        input_just_pressed(KeyCode::Digit2)
+                            .or(input_just_pressed(KeyCode::Numpad2))
+                            .or(input_just_pressed(KeyCode::Digit3))
+                            .or(input_just_pressed(KeyCode::Numpad3))
+                            .or(input_just_pressed(KeyCode::Digit4))
+                            .or(input_just_pressed(KeyCode::Numpad4))
+                            .and(no_modal)
+                            .and(not_counting_down)
+                            .and(no_pending_walk)
+                            .and(not_tile_editing),
+                    ),
                     mirror_boss_commits.run_if(on_message::<RecordingCommitted>),
                     toggle_tile_mode.run_if(
                         input_just_pressed(KeyCode::KeyT)
@@ -538,7 +588,16 @@ impl Plugin for AuthorPlugin {
                         write_tiles.run_if(input_just_pressed(KeyCode::KeyW)),
                     )
                         .run_if(tile_editing.and(no_modal)),
-                    update_author_hud,
+                    // The chip re-renders only when one of its inputs moved —
+                    // its strings are rebuilt on demand, not per frame.
+                    update_author_hud.run_if(
+                        resource_changed::<CurrentArena>
+                            .or(resource_changed::<ActiveDifficulty>)
+                            .or(resource_changed::<LoadedScores>)
+                            .or(resource_changed::<TileEditor>)
+                            .or(resource_added::<TileEditMode>)
+                            .or(resource_removed::<TileEditMode>),
+                    ),
                 )
                     .run_if(in_state(AppState::Intro)),
             );

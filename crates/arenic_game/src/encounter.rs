@@ -166,6 +166,13 @@ pub struct BossScoreFile {
 }
 
 impl BossScoreFile {
+    /// Rejects a header the reader can't trust: an unknown [`SCORE_FORMAT`]
+    /// (schema drift — refusing loudly beats silently misreading an old take)
+    /// or a file that drifted into another `(arena, difficulty)` directory.
+    pub fn validate(&self, arena: Arena, difficulty: Difficulty) -> Result<(), ScoreIoError> {
+        validate_header(self.format, self.arena, self.difficulty, arena, difficulty)
+    }
+
     /// Wraps a committed [`Recording`] for writing.
     pub fn from_recording(arena: Arena, difficulty: Difficulty, recording: &Recording) -> Self {
         Self {
@@ -196,6 +203,31 @@ impl BossScoreFile {
                 .collect(),
         }
     }
+}
+
+/// The shared header check behind [`BossScoreFile::validate`] and
+/// [`crate::tile_script::TileScriptFile::validate`]: the file must speak the
+/// reader's [`SCORE_FORMAT`] and belong to the `(arena, difficulty)` directory
+/// it was found in.
+pub(crate) fn validate_header(
+    format: u32,
+    file_arena: u8,
+    file_difficulty: Difficulty,
+    arena: Arena,
+    difficulty: Difficulty,
+) -> Result<(), ScoreIoError> {
+    if format != SCORE_FORMAT {
+        return Err(format!("score format {format} (this reader speaks {SCORE_FORMAT})").into());
+    }
+    if file_arena != arena.index() as u8 || file_difficulty != difficulty {
+        return Err(format!(
+            "header says arena {file_arena} / {file_difficulty:?}, \
+             directory says {} / {difficulty:?}",
+            arena.index(),
+        )
+        .into());
+    }
+    Ok(())
 }
 
 // --- Versioned-file naming (pure, unit-tested) ------------------------------
@@ -232,14 +264,23 @@ pub fn max_version<'a>(names: impl Iterator<Item = &'a str>, prefix: &str) -> Op
 /// `BevyError` via `?` in fallible systems.
 pub type ScoreIoError = Box<dyn core::error::Error + Send + Sync>;
 
-/// Root of every versioned encounter file: `<BEVY_ASSET_ROOT>/assets/encounters`.
+/// Root of every versioned encounter file: `<asset root>/assets/encounters`.
 /// `.cargo/config.toml` pins `BEVY_ASSET_ROOT` to the workspace root, so the
-/// scores sit beside the other shared assets and are committed to git.
+/// scores sit beside the other shared assets and are committed to git. The
+/// fallbacks mirror Bevy's `FileAssetReader` chain (`CARGO_MANIFEST_DIR`, then
+/// the executable's directory) so score files and the assets they sit beside
+/// always resolve to the SAME root — also in a shipped build run outside cargo.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn encounters_root() -> PathBuf {
     let root = std::env::var_os("BEVY_ASSET_ROOT")
+        .or_else(|| std::env::var_os("CARGO_MANIFEST_DIR"))
         .map(PathBuf::from)
-        .unwrap_or_default();
+        .unwrap_or_else(|| {
+            std::env::current_exe()
+                .ok()
+                .and_then(|exe| Some(exe.parent()?.to_path_buf()))
+                .unwrap_or_default()
+        });
     root.join("assets").join("encounters")
 }
 
@@ -250,7 +291,9 @@ pub fn encounter_dir(arena: Arena, difficulty: Difficulty) -> PathBuf {
 }
 
 /// The newest `(version, path)` of `prefix` in `dir`, or `None` when the
-/// directory is missing or holds no parseable version.
+/// directory is missing or holds no parseable version. The path is the entry's
+/// ACTUAL name, not a reconstruction — a hand-renamed `boss.v12.ron` (lenient
+/// parse, see [`parse_version`]) must resolve to the file that exists.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn latest_version(dir: &std::path::Path, prefix: &str) -> Option<(u32, PathBuf)> {
     let names: Vec<String> = std::fs::read_dir(dir)
@@ -258,7 +301,13 @@ pub fn latest_version(dir: &std::path::Path, prefix: &str) -> Option<(u32, PathB
         .filter_map(|entry| Some(entry.ok()?.file_name().to_str()?.to_owned()))
         .collect();
     let v = max_version(names.iter().map(String::as_str), prefix)?;
-    Some((v, dir.join(version_file_name(prefix, v))))
+    // Two spellings can tie (`boss.v12.ron` / `boss.v0012.ron`); `min` keeps
+    // the pick deterministic.
+    let name = names
+        .iter()
+        .filter(|name| parse_version(name, prefix) == Some(v))
+        .min()?;
+    Some((v, dir.join(name)))
 }
 
 /// Reads and parses one RON score file.
@@ -394,6 +443,45 @@ mod tests {
         assert_eq!(latest, 1);
         assert_eq!(read_ron::<BossScoreFile>(&path).unwrap(), take(1));
 
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn readers_reject_foreign_headers() {
+        let recording = Recording {
+            start: IVec2::new(1, 1),
+            events: vec![].into(),
+        };
+        let file = BossScoreFile::from_recording(Arena::Bard, Difficulty::Normal, &recording);
+        assert!(file.validate(Arena::Bard, Difficulty::Normal).is_ok());
+        // A file that drifted into another arena's or difficulty's directory.
+        assert!(file.validate(Arena::Hunter, Difficulty::Normal).is_err());
+        assert!(file.validate(Arena::Bard, Difficulty::Mythic).is_err());
+        // A future-format file is refused loudly, never misread.
+        let newer = BossScoreFile {
+            format: SCORE_FORMAT + 1,
+            ..file
+        };
+        assert!(newer.validate(Arena::Bard, Difficulty::Normal).is_err());
+    }
+
+    /// A hand-renamed version (the lenient `boss.v12.ron` spelling the parser
+    /// accepts) must resolve to the file that actually exists on disk.
+    #[test]
+    fn hand_renamed_versions_resolve_to_their_actual_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "arenic-encounter-rename-test-{}-{}",
+            std::process::id(),
+            std::time::UNIX_EPOCH.elapsed().unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("boss.v12.ron"), "stub").unwrap();
+        let (version, path) = latest_version(&dir, BOSS_PREFIX).unwrap();
+        assert_eq!(version, 12);
+        assert!(
+            path.exists(),
+            "must return the real entry, not boss.v0012.ron"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

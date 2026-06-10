@@ -53,14 +53,17 @@ pub(crate) struct DraftTimeline {
 pub(crate) struct PendingWalk(pub(crate) IVec2);
 
 /// Written once per Commit — the seam the author feature listens on to mirror
-/// a boss's committed staff into a versioned score file. The plain game build
-/// writes it and nobody reads it (the buffer just drains), so the fields look
-/// dead there.
+/// a boss's committed staff into a versioned score file. Builds without that
+/// consumer (plain game, and wasm even with the feature) write it and nobody
+/// reads it (the buffer just drains), so the fields look dead there.
 #[derive(Message)]
-#[cfg_attr(not(feature = "author"), allow(dead_code))]
+#[cfg_attr(
+    not(all(feature = "author", not(target_arch = "wasm32"))),
+    allow(dead_code)
+)]
 pub(crate) struct RecordingCommitted {
     pub(crate) entity: Entity,
-    pub(crate) arena: u8,
+    pub(crate) arena: Arena,
     pub(crate) recording: Recording,
 }
 
@@ -101,6 +104,12 @@ pub(crate) fn no_pending_walk(pending: Option<Res<PendingWalk>>) -> bool {
 
 fn counting_down(state: Res<RecordingState>) -> bool {
     matches!(*state, RecordingState::Countdown { .. })
+}
+
+/// `m:ss` of a cycle tick — the clock format every HUD strip shares.
+pub(crate) fn fmt_tick(tick: u32) -> String {
+    let secs = tick / TICKS_PER_SECOND;
+    format!("{}:{:02}", secs / 60, secs % 60)
 }
 
 /// Holds `clock`/`timeline` at tick 0 (paused) and arms the draft — the 3-second
@@ -146,8 +155,10 @@ fn fold_as_ghost(
 }
 
 /// Snaps every ghost parented to `arena` back to its recorded start tile —
-/// `except` skips a hero whose `Ghost` marker is mid-removal (commands defer).
-fn snap_arena_ghosts(
+/// `except` skips an entity whose `Ghost` marker is mid-insertion/removal
+/// (commands defer), posed by hand by the caller. Shared by the recording
+/// flows, the score sync, and the author tool's scrub/restart.
+pub(crate) fn snap_arena_ghosts(
     arena: Entity,
     ghosts: &mut Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
     except: Option<Entity>,
@@ -256,13 +267,16 @@ fn handle_r_key(
     Ok(())
 }
 
-/// Mirrors the not-yet-implemented ability slots (2-4) into the draft while
-/// recording, stamped with the recording arena's current tick. Captured in
-/// `Update` so `just_pressed` edges are never missed; the stamp quantizes the
-/// intent onto the tick grid. Anything with a LIVE effect records atomically
-/// where it applies instead — movement in `travel::move_selected`, slot 1 in
-/// `intro_scene::fire_holy_nova` — so the committed staff can never contain an
-/// event the live take didn't perform (or vice versa).
+/// Mirrors ability slots 2-4 into the draft while recording, stamped with the
+/// recording arena's current tick. Captured in `Update` so `just_pressed`
+/// edges are never missed; the stamp quantizes the intent onto the tick grid.
+/// For a hero these slots are inert on both sides (no live cast, no playback
+/// cast); for a possessed boss the author feature live-casts them through the
+/// phase loadout (`author::boss_cast_slots`) exactly as playback will resolve
+/// them — either way the committed staff can never contain an event the live
+/// take didn't perform (or vice versa). Anything else with a LIVE effect
+/// records atomically where it applies — movement in `travel::move_selected`,
+/// slot 1 in `intro_scene::fire_holy_nova`.
 fn capture_intent(
     keys: Res<ButtonInput<KeyCode>>,
     selected: Single<&ChildOf, With<Selected>>,
@@ -418,7 +432,7 @@ fn handle_choice(
                 );
                 commits.write(RecordingCommitted {
                     entity: hero,
-                    arena: arena.index() as u8,
+                    arena: *arena,
                     recording,
                 });
             }
@@ -609,8 +623,7 @@ fn update_rec_hud(
     for (part, mut text, mut color, mut visibility) in &mut parts {
         match part {
             RecHudPart::Clock => {
-                let secs = clock.tick / TICKS_PER_SECOND;
-                set_text(&mut text, format!("{}:{:02}", secs / 60, secs % 60));
+                set_text(&mut text, fmt_tick(clock.tick));
                 set_color(&mut color, theme.text_1());
             }
             RecHudPart::Rec => {

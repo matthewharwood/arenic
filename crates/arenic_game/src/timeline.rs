@@ -39,8 +39,10 @@ pub struct TimelineEvent {
     pub action: Action,
 }
 
-/// A recordable intent — a tile step or an ability slot (`1..=4`). Slots 2-4 are
-/// recorded but are no-ops on playback today (only Holy Nova exists).
+/// A recordable intent — a tile step or an ability slot (`1..=4`). On playback
+/// a hero ghost casts only slot 1 (slots 2-4 are recorded but inert until more
+/// hero abilities exist); a boss ghost resolves every slot through its phase
+/// loadout ([`crate::encounter::resolve_ability`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Move(IVec2),
