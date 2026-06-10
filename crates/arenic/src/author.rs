@@ -36,7 +36,8 @@ use arenic_game::tile_script::{
     TILES_PREFIX, TileKeyframe, TileScript, TileScriptFile, TileSelector,
 };
 use arenic_game::timeline::{
-    Action, ArenaClock, ArenaTimeline, CYCLE_TICKS, Ghost, TICKS_PER_SECOND, restart, seek_window,
+    Action, ArenaClock, ArenaTimeline, CYCLE_TICKS, Ghost, TICKS_PER_SECOND, TimelineEvent,
+    restart, seek_window,
 };
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
@@ -46,7 +47,8 @@ use crate::hud::TOP_BAR_PX;
 use crate::intro_scene::{CurrentArena, Puck, Selected};
 use crate::modal::no_modal;
 use crate::recording::{
-    RecordingCommitted, fmt_tick, is_idle, no_pending_walk, not_counting_down, snap_arena_ghosts,
+    DraftTimeline, RecordingCommitted, RecordingState, fmt_tick, is_idle, no_pending_walk,
+    not_counting_down, snap_arena_ghosts,
 };
 use crate::score_sync::LoadedScores;
 use crate::states::{AppState, TileEditMode, not_tile_editing};
@@ -127,7 +129,7 @@ fn cycle_difficulty(
     mut difficulty: ResMut<ActiveDifficulty>,
     scripts: Query<(&Arena, &TileScript)>,
 ) {
-    if let Some((arena, _)) = scripts.iter().find(|(_, script)| script.dirty) {
+    if let Some((arena, _)) = scripts.iter().find(|(_, script)| script.dirty()) {
         warn!(
             "{}: unsaved tile edits — press W before switching difficulty",
             arena.name()
@@ -138,15 +140,19 @@ fn cycle_difficulty(
     info!("authoring difficulty: {:?}", difficulty.0);
 }
 
-/// `2`-`4` — live-cast a possessed boss's loadout slots, resolved exactly as
-/// playback will resolve them ([`resolve_ability`] at the current tick), so the
-/// rehearsed take can never disagree with the committed staff. Slot 1 is the
-/// shared hero path (`intro_scene::fire_holy_nova`); the draft event itself is
-/// captured by `recording::capture_intent` in the same frame.
+/// `1`-`4` — live-cast a possessed boss's loadout slots, resolved exactly as
+/// playback will resolve them ([`resolve_ability`] at the current tick), and
+/// capture the draft event atomically with the cast — so the rehearsed take
+/// can never disagree with the committed staff. The boss never goes through
+/// the hero paths (`fire_holy_nova` excludes it; `capture_intent` skips it):
+/// hero slot 1 is hard-wired Holy Nova, but a boss's slot 1 follows whatever
+/// its phase loadout says.
 fn boss_cast_slots(
     mut commands: Commands,
     keys: Res<ButtonInput<KeyCode>>,
     difficulty: Res<ActiveDifficulty>,
+    state: Res<RecordingState>,
+    mut draft: ResMut<DraftTimeline>,
     boss: Single<(Entity, &ChildOf), (With<Selected>, With<Boss>, Without<Ghost>)>,
     arenas: Query<(&Arena, &ArenaClock)>,
     meshes: Res<AbilityMeshes>,
@@ -155,16 +161,24 @@ fn boss_cast_slots(
 ) -> Result {
     let (boss, child_of) = *boss;
     let (arena, clock) = arenas.get(child_of.parent())?;
-    const SLOTS: [(KeyCode, KeyCode, u8); 3] = [
+    const SLOTS: [(KeyCode, KeyCode, u8); 4] = [
+        (KeyCode::Digit1, KeyCode::Numpad1, 1),
         (KeyCode::Digit2, KeyCode::Numpad2, 2),
         (KeyCode::Digit3, KeyCode::Numpad3, 3),
         (KeyCode::Digit4, KeyCode::Numpad4, 4),
     ];
     for (digit, numpad, slot) in SLOTS {
-        if (keys.just_pressed(digit) || keys.just_pressed(numpad))
-            && let Some(id) = resolve_ability(true, *arena, difficulty.0, slot, clock.tick)
-        {
+        if !(keys.just_pressed(digit) || keys.just_pressed(numpad)) {
+            continue;
+        }
+        if let Some(id) = resolve_ability(true, *arena, difficulty.0, slot, clock.tick) {
             cast(&mut commands, id, &meshes, &mut materials, &sfx, boss);
+        }
+        if matches!(*state, RecordingState::Recording) {
+            draft.events.push(TimelineEvent {
+                tick: clock.tick,
+                action: Action::Ability(slot),
+            });
         }
     }
     Ok(())
@@ -177,19 +191,17 @@ fn boss_cast_slots(
 fn mirror_boss_commits(
     mut commits: MessageReader<RecordingCommitted>,
     bosses: Query<(), With<Boss>>,
-    difficulty: Res<ActiveDifficulty>,
     mut loaded: ResMut<LoadedScores>,
 ) {
     for commit in commits.read() {
         if bosses.get(commit.entity).is_err() {
             continue;
         }
-        let arena = commit.arena;
-        let file = BossScoreFile::from_recording(arena, difficulty.0, &commit.recording);
-        match write_versioned_ron(&encounter_dir(arena, difficulty.0), BOSS_PREFIX, &file) {
+        let (arena, difficulty) = (commit.arena, commit.difficulty);
+        let file = BossScoreFile::from_recording(arena, difficulty, &commit.recording);
+        match write_versioned_ron(&encounter_dir(arena, difficulty), BOSS_PREFIX, &file) {
             Ok((version, path)) => {
-                loaded.0.entry(arena.index() as u8).or_default().boss =
-                    Some((difficulty.0, version));
+                loaded.0.entry(arena.index() as u8).or_default().boss = Some((difficulty, version));
                 info!(
                     "{}: boss score v{version} written ({})",
                     arena.name(),
@@ -377,13 +389,12 @@ fn paint(
             if script.keyframes.len() == before {
                 script.keyframes.push(keyframe);
             }
-            script.dirty = true;
         }
         None => {
             commands.entity(arena_entity).insert(TileScript {
                 keyframes: vec![keyframe],
                 applied: default(),
-                dirty: true,
+                saved: default(),
             });
         }
     }
@@ -411,7 +422,7 @@ fn write_tiles(
     };
     match write_versioned_ron(&encounter_dir(*arena, difficulty.0), TILES_PREFIX, &file) {
         Ok((version, path)) => {
-            script.dirty = false;
+            script.saved = script.keyframes.clone();
             loaded.0.entry(arena.index() as u8).or_default().tiles = Some((difficulty.0, version));
             info!(
                 "{}: tile script v{version} written ({})",
@@ -548,7 +559,9 @@ impl Plugin for AuthorPlugin {
                             .and(not_tile_editing),
                     ),
                     boss_cast_slots.run_if(
-                        input_just_pressed(KeyCode::Digit2)
+                        input_just_pressed(KeyCode::Digit1)
+                            .or(input_just_pressed(KeyCode::Numpad1))
+                            .or(input_just_pressed(KeyCode::Digit2))
                             .or(input_just_pressed(KeyCode::Numpad2))
                             .or(input_just_pressed(KeyCode::Digit3))
                             .or(input_just_pressed(KeyCode::Numpad3))

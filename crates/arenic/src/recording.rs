@@ -7,8 +7,10 @@
 //! Character Query Pattern). Every modal decision lands here in [`handle_choice`],
 //! the single, idempotent place state transitions are applied.
 
+use arenic_game::Boss;
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
+use arenic_game::encounter::{ActiveDifficulty, Difficulty};
 use arenic_game::grid::TileMover;
 use arenic_game::timeline::{
     Action, ArenaClock, ArenaTimeline, COUNTDOWN_TICKS, CYCLE_TICKS, Ghost, Recording,
@@ -64,6 +66,10 @@ pub(crate) struct PendingWalk(pub(crate) IVec2);
 pub(crate) struct RecordingCommitted {
     pub(crate) entity: Entity,
     pub(crate) arena: Arena,
+    /// Stamped at COMMIT time — the mirror runs unordered against
+    /// [`handle_choice`], so reading [`ActiveDifficulty`] there could see a
+    /// post-commit `D` press.
+    pub(crate) difficulty: Difficulty,
     pub(crate) recording: Recording,
 }
 
@@ -267,23 +273,28 @@ fn handle_r_key(
     Ok(())
 }
 
-/// Mirrors ability slots 2-4 into the draft while recording, stamped with the
-/// recording arena's current tick. Captured in `Update` so `just_pressed`
-/// edges are never missed; the stamp quantizes the intent onto the tick grid.
-/// For a hero these slots are inert on both sides (no live cast, no playback
-/// cast); for a possessed boss the author feature live-casts them through the
-/// phase loadout (`author::boss_cast_slots`) exactly as playback will resolve
-/// them — either way the committed staff can never contain an event the live
-/// take didn't perform (or vice versa). Anything else with a LIVE effect
-/// records atomically where it applies — movement in `travel::move_selected`,
+/// Mirrors a HERO's ability slots 2-4 into the draft while recording, stamped
+/// with the recording arena's current tick. Captured in `Update` so
+/// `just_pressed` edges are never missed; the stamp quantizes the intent onto
+/// the tick grid. Hero slots 2-4 are inert on both sides (no live cast, no
+/// playback cast), so recording them silently keeps the staff faithful. A
+/// possessed BOSS is skipped here entirely: every boss slot has a live effect
+/// (the phase loadout), so `author::boss_cast_slots` captures cast + event
+/// atomically — the committed staff can never contain an event the live take
+/// didn't perform (or vice versa). Anything else with a LIVE effect records
+/// atomically where it applies — movement in `travel::move_selected`, hero
 /// slot 1 in `intro_scene::fire_holy_nova`.
 fn capture_intent(
     keys: Res<ButtonInput<KeyCode>>,
-    selected: Single<&ChildOf, With<Selected>>,
+    selected: Single<(&ChildOf, Has<Boss>), With<Selected>>,
     clocks: Query<&ArenaClock>,
     mut draft: ResMut<DraftTimeline>,
 ) -> Result {
-    let tick = clocks.get(selected.parent())?.tick;
+    let (child_of, is_boss) = *selected;
+    if is_boss {
+        return Ok(());
+    }
+    let tick = clocks.get(child_of.parent())?.tick;
     const SLOTS: [(KeyCode, KeyCode, u8); 3] = [
         (KeyCode::Digit2, KeyCode::Numpad2, 2),
         (KeyCode::Digit3, KeyCode::Numpad3, 3),
@@ -352,6 +363,7 @@ fn handle_choice(
     mut commands: Commands,
     mut choices: MessageReader<ModalChoice>,
     mut commits: MessageWriter<RecordingCommitted>,
+    difficulty: Res<ActiveDifficulty>,
     mut state: ResMut<RecordingState>,
     mut draft: ResMut<DraftTimeline>,
     mut heroes: ParamSet<(
@@ -433,6 +445,7 @@ fn handle_choice(
                 commits.write(RecordingCommitted {
                     entity: hero,
                     arena: *arena,
+                    difficulty: difficulty.0,
                     recording,
                 });
             }

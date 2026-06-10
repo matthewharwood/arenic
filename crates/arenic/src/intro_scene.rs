@@ -709,12 +709,14 @@ fn draw_overworld_gizmos(mut gizmos: Gizmos, current: Res<CurrentArena>) {
 /// A selected ghost never casts live — its recorded casts play back instead.
 /// While recording, the cast lands in the draft HERE, atomically with the live
 /// effect (like movement in `travel::move_selected`), so the committed staff and
-/// the rehearsed take can never disagree about a cast.
+/// the rehearsed take can never disagree about a cast. A possessed [`Boss`] is
+/// excluded: its slot 1 follows the phase loadout, not the hero's hard-wired
+/// Holy Nova (`author::boss_cast_slots` owns all four boss slots).
 fn fire_holy_nova(
     mut commands: Commands,
     state: Res<RecordingState>,
     mut draft: ResMut<DraftTimeline>,
-    player: Single<(Entity, &ChildOf), (With<Selected>, Without<Ghost>)>,
+    player: Single<(Entity, &ChildOf), (With<Selected>, Without<Ghost>, Without<Boss>)>,
     clocks: Query<&ArenaClock>,
     meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,

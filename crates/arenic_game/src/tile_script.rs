@@ -90,14 +90,22 @@ pub struct AppliedCell {
 
 /// An arena root's live tile script: the keyframes driving its board, plus the
 /// cells the script currently holds (with what they wore before, so the applier
-/// can revert exactly what it touched — and nothing else). `dirty` marks
-/// keyframes edited in the author tool since the last save/load; an unsaved
-/// script is never overwritten by the score sync.
+/// can revert exactly what it touched — and nothing else). `saved` is the
+/// keyframe set as last loaded/saved — the baseline [`Self::dirty`] compares
+/// against, so an author edit that undoes itself is clean again.
 #[derive(Component, Default)]
 pub struct TileScript {
     pub keyframes: Vec<TileKeyframe>,
     pub applied: HashMap<(u8, u8), AppliedCell>,
-    pub dirty: bool,
+    pub saved: Vec<TileKeyframe>,
+}
+
+impl TileScript {
+    /// `true` while the keyframes differ from the last saved/loaded state —
+    /// unsaved author work the score sync must not destroy.
+    pub fn dirty(&self) -> bool {
+        self.keyframes != self.saved
+    }
 }
 
 /// The cells `selector` covers `ticks_in` ticks after its keyframe began.
