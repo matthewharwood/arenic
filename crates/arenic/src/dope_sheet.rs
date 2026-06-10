@@ -143,10 +143,11 @@ enum ToggleKind {
 }
 
 /// Asks the preview to re-fold an arena after a stack edit that changes what
-/// is effective (mute/solo). Handled by [`refold_preview`].
+/// is effective (mute/solo, layer add/remove). Handled by [`refold_preview`];
+/// written here and by the author's layer-creation keys.
 #[derive(Message)]
-struct RefoldPreview {
-    arena: Entity,
+pub(crate) struct RefoldPreview {
+    pub(crate) arena: Entity,
 }
 
 /// Spawns the panel skeleton once per Intro entry; rows/ruler content are
@@ -781,6 +782,16 @@ fn refold_preview(
         >,
         Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
     )>,
+    mut minions: Query<
+        (
+            Entity,
+            &arenic_game::layer::LayerBinding,
+            &ChildOf,
+            &mut TileMover,
+            &mut Transform,
+        ),
+        With<arenic_game::layer::Minion>,
+    >,
 ) {
     for request in requests.read() {
         let Ok((arena_entity, arena_id, mut clock, mut timeline, tile_script, arena_stack)) =
@@ -810,6 +821,7 @@ fn refold_preview(
             &mut clock,
             &mut timeline,
             &mut movers,
+            &mut minions,
         );
     }
 }

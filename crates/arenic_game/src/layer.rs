@@ -104,12 +104,19 @@ impl Layer {
     }
 }
 
-/// Marks an entity as the live binding of one layer (inserted at fold time —
-/// the boss root today, minions next). The effect systems resolve a bound
-/// entity's tracks through this.
+/// Marks an entity as the live binding of one layer (inserted at fold time on
+/// boss and minion roots). The effect systems resolve a bound entity's tracks
+/// through this.
 #[derive(Component, Clone, Copy, Debug)]
 #[component(immutable)]
 pub struct LayerBinding(pub LayerId);
+
+/// Marks a minion root — a timeline-authored entity pre-spawned at fold time,
+/// possessed/recorded exactly like the boss, hidden outside its
+/// [`crate::timeline::ActiveWindow`].
+#[derive(Component, Clone, Copy, Debug)]
+#[component(immutable)]
+pub struct Minion;
 
 /// The ordered stack: index 0 = bottom, last = top (the panel renders top
 /// first, AE-style). Fold applies bottom→top so the top layer wins conflicts.
@@ -572,6 +579,7 @@ mod tests {
     fn fold_stack_is_deterministic_and_binding_scoped() {
         let mut world = World::new();
         let (boss, minion) = (world.spawn_empty().id(), world.spawn_empty().id());
+        let (minion_b, minion_c) = (world.spawn_empty().id(), world.spawn_empty().id());
         let mut stack = LayerStack::default();
         stack.layers.push(Layer::new(
             LayerId(0),
@@ -589,7 +597,26 @@ mod tests {
                 recording: rec((1, 1), &[60, 70]),
             }),
         ));
-        let bindings = [(LayerId(0), boss), (LayerId(1), minion)];
+        // Three minion layers — the wave the design doc promises.
+        for (id, entity_tick) in [(2u32, 90u32), (3, 120)] {
+            stack.layers.push(Layer::new(
+                LayerId(id),
+                format!("Minion {id}"),
+                LayerKind::Minion(MinionLayer {
+                    archetype: MinionArchetype::Token,
+                    spawn_tick: entity_tick,
+                    despawn_tick: 600,
+                    spawn_tile: IVec2::new(2, 2),
+                    recording: rec((2, 2), &[entity_tick]),
+                }),
+            ));
+        }
+        let bindings = [
+            (LayerId(0), boss),
+            (LayerId(1), minion),
+            (LayerId(2), minion_b),
+            (LayerId(3), minion_c),
+        ];
         let (mut a, mut b) = (ArenaTimeline::default(), ArenaTimeline::default());
         fold_stack(&stack, &bindings, &mut a);
         fold_stack(&stack, &bindings, &mut b);
@@ -603,7 +630,14 @@ mod tests {
         );
         assert_eq!(
             ticks,
-            vec![(5, boss), (10, boss), (60, minion), (70, minion)]
+            vec![
+                (5, boss),
+                (10, boss),
+                (60, minion),
+                (70, minion),
+                (90, minion_b),
+                (120, minion_c)
+            ]
         );
         // An unbound layer folds nothing rather than panicking.
         let mut partial = ArenaTimeline::default();

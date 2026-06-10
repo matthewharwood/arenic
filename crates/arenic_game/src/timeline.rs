@@ -82,6 +82,38 @@ pub struct Ghost {
     pub start: IVec2,
 }
 
+/// A timeline-authored existence window: the entity is visible (and active)
+/// only while its arena's clock is inside `spawn..despawn`. Entities with a
+/// window PRE-SPAWN at fold time and merely hide outside it — no mid-cycle
+/// entity churn, so `GhostEvent.ghost` stays valid for the whole cycle and
+/// replay stays deterministic (`_docs/AUTHORING_UI.md` §1.4).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct ActiveWindow {
+    pub spawn: u32,
+    pub despawn: u32,
+}
+
+/// Drives [`ActiveWindow`] visibility from each arena's clock.
+fn apply_active_windows(
+    arenas: Query<&ArenaClock>,
+    mut windows: Query<(&ActiveWindow, &ChildOf, &mut Visibility)>,
+) {
+    for (window, child_of, mut visibility) in &mut windows {
+        let Ok(clock) = arenas.get(child_of.parent()) else {
+            continue;
+        };
+        let inside = (window.spawn..window.despawn).contains(&clock.tick);
+        let want = if inside {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+        if *visibility != want {
+            *visibility = want;
+        }
+    }
+}
+
 /// One event of the master timeline: a [`TimelineEvent`] tagged with the ghost
 /// entity it drives.
 #[derive(Clone, Copy, Debug)]
@@ -173,7 +205,15 @@ fn play_timelines(
     mut commands: Commands,
     difficulty: Res<ActiveDifficulty>,
     mut arenas: Query<(&Arena, &ArenaClock, &mut ArenaTimeline)>,
-    mut ghosts: Query<(&mut TileMover, &mut Transform, Has<Boss>), With<Ghost>>,
+    mut ghosts: Query<
+        (
+            &mut TileMover,
+            &mut Transform,
+            Has<Boss>,
+            Has<crate::layer::Minion>,
+        ),
+        With<Ghost>,
+    >,
     meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     sfx: Res<AbilitySfx>,
@@ -196,12 +236,16 @@ fn play_timelines(
             timeline.cursor = timeline.cursor.strict_add(1);
             match action {
                 Action::Move(delta) => {
-                    if let Ok((mut mover, mut transform, _)) = ghosts.get_mut(ghost) {
+                    if let Ok((mut mover, mut transform, ..)) = ghosts.get_mut(ghost) {
                         mover.step(&mut transform, delta);
                     }
                 }
                 Action::Ability { slot, aim } => {
-                    let is_boss = ghosts.get(ghost).is_ok_and(|(_, _, boss)| boss);
+                    // Bosses AND minions resolve through the phase loadout
+                    // (per-archetype loadouts arrive when loadout() branches).
+                    let is_boss = ghosts
+                        .get(ghost)
+                        .is_ok_and(|(_, _, boss, minion)| boss || minion);
                     // Resolve at the event's RECORDED tick, so an ability keeps
                     // the phase it was authored in even if playback ever lags.
                     if let Some(id) = resolve_ability(is_boss, *arena, difficulty.0, slot, tick) {
@@ -273,6 +317,7 @@ impl Plugin for TimelinePlugin {
                         resource_exists::<AbilitySfx>.and(resource_exists::<AbilityMeshes>),
                     ),
                     tick_clocks,
+                    apply_active_windows,
                 )
                     .chain()
                     .in_set(TimelineSet),

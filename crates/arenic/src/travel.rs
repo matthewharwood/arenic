@@ -40,6 +40,7 @@ fn move_selected(
             &ChildOf,
             Has<Ghost>,
             Has<Boss>,
+            Has<arenic_game::Minion>,
             &RecordingLibrary,
         ),
         With<Selected>,
@@ -49,7 +50,7 @@ fn move_selected(
     mut current: ResMut<CurrentArena>,
 ) -> Result {
     let delta = arrow_delta(&keys);
-    let (hero, mut mover, mut transform, child_of, is_ghost, is_boss, library) =
+    let (hero, mut mover, mut transform, child_of, is_ghost, is_boss, is_minion, library) =
         selected.into_inner();
     let arena_entity = child_of.parent();
     let (_, arena) = arena_roots.get(arena_entity)?;
@@ -78,7 +79,8 @@ fn move_selected(
 
     let target = IVec2::new(mover.col.strict_add(delta.x), mover.row.strict_add(delta.y));
     let inside = (0..=MAX_COL).contains(&target.x) && (0..=MAX_ROW).contains(&target.y);
-    let crossing = if inside || is_boss {
+    // Bosses AND minions never edge-walk — their arena IS their world.
+    let crossing = if inside || is_boss || is_minion {
         None
     } else {
         adjacent_entry(arena.index(), mover.col, mover.row, delta)

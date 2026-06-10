@@ -2,12 +2,15 @@
 //! shipping build). The in-game tooling for choreographing LAYERED encounters
 //! (`_docs/AUTHORING_UI.md`):
 //!
-//! - **`B`** possesses / releases the current arena's [`Boss`]: `Selected`
-//!   moves onto the boss root, and from there the ENTIRE hero flow applies
-//!   unchanged — arrows step it, `1`-`4` cast its phase-loadout slots
-//!   ([`boss_cast_slots`] live-casts exactly what playback will resolve),
-//!   `R` records its 2-minute staff, Commit folds it back in as a ghost AND
-//!   stages the take into the arena's DRAFT [`ArenaStack`] boss layer.
+//! - **`B`** cycles the possession roster — the arena's [`Boss`], then each
+//!   [`Minion`] (by layer id), then back to puck 0. `Selected` moves onto the
+//!   possessed root, and from there the ENTIRE hero flow applies unchanged —
+//!   arrows step it, `1`-`4` cast its phase-loadout slots ([`boss_cast_slots`]
+//!   live-casts exactly what playback will resolve), `R` records its 2-minute
+//!   staff, Commit folds it back in as a ghost AND stages the take into the
+//!   entity's bound layer in the DRAFT [`ArenaStack`].
+//! - **`M`** drops a new minion layer at the playhead (the entity browser
+//!   supersedes this as the primary creation path).
 //! - **`W`** PUBLISHES the focused arena's whole draft stack as the next
 //!   versioned `assets/encounters/<arena>/<difficulty>/layers.vNNNN.ron` —
 //!   the atomic unit the game folds at every cycle wrap.
@@ -33,12 +36,15 @@ use arenic_game::audio::AudioMix;
 use arenic_game::default_font::MonoFont;
 use arenic_game::encounter::{ActiveDifficulty, encounter_dir, resolve_ability};
 use arenic_game::grid::{MAX_COL, MAX_ROW, TileMover, arrow_delta, arrow_pressed, tile_to_world};
-use arenic_game::layer::{ArenaStack, Layer, LayerId, LayerKind, write_stack};
+use arenic_game::layer::{
+    ArenaStack, Layer, LayerBinding, LayerId, LayerKind, Minion, MinionArchetype, MinionLayer,
+    write_stack,
+};
 use arenic_game::tile::TileKind;
 use arenic_game::tile_script::{TileKeyframe, TileScript, TileSelector};
 use arenic_game::timeline::{
-    Action, ArenaClock, ArenaTimeline, CYCLE_TICKS, Ghost, TICKS_PER_SECOND, TimelineEvent,
-    restart, seek_window,
+    Action, ArenaClock, ArenaTimeline, CYCLE_TICKS, Ghost, Recording, TICKS_PER_SECOND,
+    TimelineEvent, restart, seek_window,
 };
 use bevy::audio::DefaultSpatialScale;
 use bevy::input::common_conditions::input_just_pressed;
@@ -110,26 +116,51 @@ pub(crate) fn stacks_changed(stacks: Query<(), Changed<ArenaStack>>) -> bool {
 fn possess_boss(
     mut commands: Commands,
     mut current: ResMut<CurrentArena>,
-    selected: Single<(Entity, Has<Boss>), With<Selected>>,
-    bosses: Query<(Entity, &ChildOf), With<Boss>>,
+    selected: Single<(Entity, Has<Boss>, Has<Minion>), With<Selected>>,
+    possessables: Query<
+        (Entity, &ChildOf, Has<Boss>, Option<&LayerBinding>),
+        Or<(With<Boss>, With<Minion>)>,
+    >,
     pucks: Query<(Entity, &Puck, &ChildOf)>,
     arenas: Query<&Arena>,
 ) -> Result {
-    let (holder, is_boss) = *selected;
-    if is_boss {
-        let Some((puck, _, child_of)) = pucks.iter().min_by_key(|(_, puck, _)| puck.0) else {
-            return Ok(());
-        };
-        commands.entity(holder).remove::<Selected>();
-        commands.entity(puck).insert(Selected);
-        current.0 = arenas.get(child_of.parent())?.index();
-    } else if let Some((boss, _)) = bosses.iter().find(|(_, child_of)| {
-        arenas
-            .get(child_of.parent())
-            .is_ok_and(|arena| arena.index() == current.0)
-    }) {
-        commands.entity(holder).remove::<Selected>();
-        commands.entity(boss).insert(Selected);
+    // The roster, deterministic: the boss first, then minions by layer id.
+    let mut roster: Vec<(Entity, bool, u32)> = possessables
+        .iter()
+        .filter(|(_, child_of, ..)| {
+            arenas
+                .get(child_of.parent())
+                .is_ok_and(|arena| arena.index() == current.0)
+        })
+        .map(|(entity, _, is_boss, binding)| (entity, is_boss, binding.map_or(u32::MAX, |b| b.0.0)))
+        .collect();
+    roster.sort_by_key(|&(_, is_boss, id)| (!is_boss, id));
+
+    let (holder, is_boss, is_minion) = *selected;
+    let next = if is_boss || is_minion {
+        // Step through the roster; past the end → release back to puck 0.
+        roster
+            .iter()
+            .position(|&(entity, ..)| entity == holder)
+            .and_then(|at| roster.get(at.strict_add(1)))
+            .map(|&(entity, ..)| entity)
+    } else {
+        roster.first().map(|&(entity, ..)| entity)
+    };
+    match next {
+        Some(entity) => {
+            commands.entity(holder).remove::<Selected>();
+            commands.entity(entity).insert(Selected);
+        }
+        None if is_boss || is_minion => {
+            let Some((puck, _, child_of)) = pucks.iter().min_by_key(|(_, puck, _)| puck.0) else {
+                return Ok(());
+            };
+            commands.entity(holder).remove::<Selected>();
+            commands.entity(puck).insert(Selected);
+            current.0 = arenas.get(child_of.parent())?.index();
+        }
+        None => {}
     }
     Ok(())
 }
@@ -166,7 +197,14 @@ fn boss_cast_slots(
     difficulty: Res<ActiveDifficulty>,
     state: Res<RecordingState>,
     mut draft: ResMut<DraftTimeline>,
-    boss: Single<(Entity, &ChildOf), (With<Selected>, With<Boss>, Without<Ghost>)>,
+    boss: Single<
+        (Entity, &ChildOf),
+        (
+            With<Selected>,
+            Or<(With<Boss>, With<Minion>)>,
+            Without<Ghost>,
+        ),
+    >,
     arenas: Query<(&Arena, &ArenaClock)>,
     meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -227,11 +265,11 @@ fn commit_to_layer(
     mut commands: Commands,
     mut commits: MessageReader<RecordingCommitted>,
     difficulty: Res<ActiveDifficulty>,
-    bosses: Query<&ChildOf, With<Boss>>,
+    bosses: Query<(&ChildOf, Option<&LayerBinding>), Or<(With<Boss>, With<Minion>)>>,
     mut stacks: Query<&mut ArenaStack>,
 ) {
     for commit in commits.read() {
-        let Ok(child_of) = bosses.get(commit.entity) else {
+        let Ok((child_of, binding)) = bosses.get(commit.entity) else {
             continue;
         };
         if commit.difficulty != difficulty.0 {
@@ -247,13 +285,28 @@ fn commit_to_layer(
         }
         let arena_entity = child_of.parent();
         if let Ok(mut arena_stack) = stacks.get_mut(arena_entity) {
-            let boss_layer = arena_stack
-                .stack
-                .layers
-                .iter_mut()
-                .find(|layer| matches!(layer.kind, LayerKind::Boss(_)));
-            match boss_layer {
-                Some(layer) => layer.kind = LayerKind::Boss(commit.recording.clone()),
+            // A bound entity (minion, or a boss the sync folded) routes to ITS
+            // layer; an unbound boss falls back to the stack's boss layer.
+            let bound_id = binding
+                .map(|binding| binding.0)
+                .filter(|&id| arena_stack.stack.layer(id).is_some());
+            let layer = match bound_id {
+                Some(id) => arena_stack.stack.layer_mut(id),
+                None => arena_stack
+                    .stack
+                    .layers
+                    .iter_mut()
+                    .find(|layer| matches!(layer.kind, LayerKind::Boss(_))),
+            };
+            match layer {
+                Some(layer) => match &mut layer.kind {
+                    LayerKind::Boss(recording) => *recording = commit.recording.clone(),
+                    LayerKind::Minion(minion) => minion.recording = commit.recording.clone(),
+                    LayerKind::Tiles(_) => warn!(
+                        "{}: commit bound to a tile layer — dropped",
+                        commit.arena.name()
+                    ),
+                },
                 None => {
                     let id = arena_stack.stack.next_id();
                     arena_stack.stack.layers.push(Layer::new(
@@ -572,6 +625,68 @@ fn publish_stack(
     }
 }
 
+/// `M` — drop a new MINION layer at the playhead: spawn tile near the arena
+/// centre, alive from the current tick to the cycle's end, empty staff. The
+/// preview re-folds (pre-spawning the hidden token); possess it with `B`,
+/// record with `R`, publish with `W`. The entity browser (ARE-43) supersedes
+/// this as the primary creation path.
+fn add_minion_layer(
+    mut commands: Commands,
+    current: Res<CurrentArena>,
+    mut arenas: Query<(Entity, &Arena, &ArenaClock, Option<&mut ArenaStack>)>,
+    mut refold: MessageWriter<crate::dope_sheet::RefoldPreview>,
+) {
+    let Some((arena_entity, arena, clock, arena_stack)) = arenas
+        .iter_mut()
+        .find(|(_, arena, ..)| arena.index() == current.0)
+    else {
+        return;
+    };
+    let created = arena_stack.is_none();
+    let mut fresh_stack;
+    let stack = match arena_stack {
+        Some(stack) => stack.into_inner(),
+        None => {
+            fresh_stack = ArenaStack::default();
+            &mut fresh_stack
+        }
+    };
+    let ordinal = stack
+        .stack
+        .layers
+        .iter()
+        .filter(|layer| matches!(layer.kind, LayerKind::Minion(_)))
+        .count()
+        .strict_add(1);
+    let spawn_tile = IVec2::new(30, 12);
+    let id = stack.stack.next_id();
+    stack.stack.layers.push(Layer::new(
+        id,
+        format!("Minion {ordinal}"),
+        LayerKind::Minion(MinionLayer {
+            archetype: MinionArchetype::Token,
+            spawn_tick: clock.tick,
+            despawn_tick: CYCLE_TICKS,
+            spawn_tile,
+            recording: Recording {
+                start: spawn_tile,
+                events: Vec::new().into(),
+            },
+        }),
+    ));
+    info!(
+        "{}: new minion layer \"Minion {ordinal}\" at tick {}",
+        arena.name(),
+        clock.tick
+    );
+    if created {
+        commands.entity(arena_entity).insert(stack.clone());
+    }
+    refold.write(crate::dope_sheet::RefoldPreview {
+        arena: arena_entity,
+    });
+}
+
 /// Tab (tile mode) — cycle the paint-target among the stack's tile layers.
 fn cycle_tile_layer(
     mut editor: ResMut<TileEditor>,
@@ -813,6 +928,12 @@ impl Plugin for AuthorPlugin {
                             .and(not_tile_editing),
                     ),
                     commit_to_layer.run_if(on_message::<RecordingCommitted>),
+                    add_minion_layer.run_if(
+                        input_just_pressed(KeyCode::KeyM)
+                            .and(no_modal)
+                            .and(is_idle)
+                            .and(not_tile_editing),
+                    ),
                     // `W` publishes the focused arena's whole stack — from
                     // anywhere in author mode, tile editor open or not.
                     publish_stack

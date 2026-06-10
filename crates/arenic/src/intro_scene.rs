@@ -721,7 +721,15 @@ fn fire_holy_nova(
     mut commands: Commands,
     state: Res<RecordingState>,
     mut draft: ResMut<DraftTimeline>,
-    player: Single<(Entity, &ChildOf), (With<Selected>, Without<Ghost>, Without<Boss>)>,
+    player: Single<
+        (Entity, &ChildOf),
+        (
+            With<Selected>,
+            Without<Ghost>,
+            Without<Boss>,
+            Without<arenic_game::Minion>,
+        ),
+    >,
     clocks: Query<&ArenaClock>,
     meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,

@@ -36,9 +36,15 @@ use arenic_game::encounter::{ActiveDifficulty, encounter_dir};
 #[cfg(not(target_arch = "wasm32"))]
 use arenic_game::grid::TileMover;
 #[cfg(not(target_arch = "wasm32"))]
-use arenic_game::layer::{ArenaStack, LayerBinding, LayerKind, LayerStack, fold_stack, read_stack};
+use arenic_game::grid::tile_to_world;
 #[cfg(not(target_arch = "wasm32"))]
-use arenic_game::timeline::{ArenaTimeline, Ghost, RecordingLibrary, restart, unfold};
+use arenic_game::layer::{
+    ArenaStack, LayerBinding, LayerId, LayerKind, LayerStack, Minion, fold_stack, read_stack,
+};
+#[cfg(not(target_arch = "wasm32"))]
+use arenic_game::timeline::{
+    ActiveWindow, ArenaTimeline, Ghost, RecordingLibrary, restart, unfold,
+};
 
 #[cfg(not(target_arch = "wasm32"))]
 use crate::intro_scene::Selected;
@@ -93,6 +99,16 @@ fn sync_scores(
         >,
         Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
     )>,
+    mut minions: Query<
+        (
+            Entity,
+            &LayerBinding,
+            &ChildOf,
+            &mut TileMover,
+            &mut Transform,
+        ),
+        With<Minion>,
+    >,
     mut board: TileBoard,
 ) {
     for (arena_entity, arena_id, mut clock, mut timeline, tile_script, arena_stack) in &mut arenas {
@@ -184,6 +200,7 @@ fn sync_scores(
                     &mut clock,
                     &mut timeline,
                     &mut movers,
+                    &mut minions,
                 );
                 commands
                     .entity(arena_entity)
@@ -209,6 +226,12 @@ fn sync_scores(
                     &mut movers.p1(),
                     boss.map(|(entity, ..)| entity),
                 );
+                // Pre-spawned minions belong to the stack — gone with it.
+                for (entity, _, child_of, ..) in &minions {
+                    if child_of.parent() == arena_entity {
+                        commands.entity(entity).despawn();
+                    }
+                }
                 commands
                     .entity(arena_entity)
                     .remove::<(TileScript, ArenaStack)>();
@@ -248,16 +271,84 @@ pub(crate) fn apply_stack_preview(
         >,
         Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
     )>,
+    minions: &mut Query<
+        (
+            Entity,
+            &LayerBinding,
+            &ChildOf,
+            &mut TileMover,
+            &mut Transform,
+        ),
+        With<Minion>,
+    >,
 ) {
     // Bind the FIRST effective boss layer to the arena's boss root.
     let boss_layer = stack.effective().find_map(|layer| match &layer.kind {
         LayerKind::Boss(recording) => Some((layer.id, recording.clone())),
         _ => None,
     });
-    let bindings: Vec<_> = match (boss, &boss_layer) {
+    let mut bindings: Vec<_> = match (boss, &boss_layer) {
         (Some(entity), Some((id, _))) => vec![(*id, entity)],
         _ => Vec::new(),
     };
+
+    // --- Minion layers: one PRE-SPAWNED root per effective layer ------------
+    // Existing roots re-bind by LayerBinding; vanished/muted layers despawn
+    // theirs; new layers spawn bare roots the dresser clothes next frame.
+    // Pre-spawning (never mid-cycle churn) keeps Entity-keyed playback valid
+    // for the whole cycle (`_docs/AUTHORING_UI.md` §1.4).
+    let mut stale: Vec<(LayerId, Entity)> = minions
+        .iter()
+        .filter(|(_, _, child_of, ..)| child_of.parent() == arena_entity)
+        .map(|(entity, binding, ..)| (binding.0, entity))
+        .collect();
+    for layer in stack.effective() {
+        let LayerKind::Minion(minion) = &layer.kind else {
+            continue;
+        };
+        let entity = match stale.iter().find(|(id, _)| *id == layer.id) {
+            Some(&(_, entity)) => {
+                // Re-pose by hand — its refreshed Ghost lands deferred.
+                if let Ok((.., mut mover, mut transform)) = minions.get_mut(entity) {
+                    mover.snap_to(
+                        &mut transform,
+                        minion.recording.start.x,
+                        minion.recording.start.y,
+                    );
+                }
+                entity
+            }
+            None => {
+                let p = tile_to_world(minion.spawn_tile.x, minion.spawn_tile.y);
+                commands
+                    .spawn((
+                        Minion,
+                        LayerBinding(layer.id),
+                        TileMover::new(minion.spawn_tile.x, minion.spawn_tile.y),
+                        RecordingLibrary::default(),
+                        Transform::from_xyz(p.x, p.y, 0.05),
+                        Visibility::Hidden,
+                        ChildOf(arena_entity),
+                    ))
+                    .id()
+            }
+        };
+        commands.entity(entity).insert((
+            ActiveWindow {
+                spawn: minion.spawn_tick,
+                despawn: minion.despawn_tick,
+            },
+            Ghost {
+                start: minion.recording.start,
+            },
+        ));
+        bindings.push((layer.id, entity));
+        stale.retain(|(id, _)| *id != layer.id);
+    }
+    for (_, entity) in stale {
+        commands.entity(entity).despawn();
+    }
+
     fold_stack(stack, &bindings, timeline);
     restart(clock, timeline);
     snap_arena_ghosts(arena_entity, &mut movers.p1(), boss);
@@ -297,6 +388,40 @@ pub(crate) fn apply_stack_preview(
         keyframes: stack.merged_tiles(),
         applied: default(),
     });
+}
+
+/// Clothes a freshly pre-spawned minion root in its token visual — a small
+/// theme-tinted disc, visually distinct from the boss shell and the pucks.
+/// The visual is a rotated CHILD so the root's transform stays clean for
+/// playback and scale effects.
+#[cfg(not(target_arch = "wasm32"))]
+fn dress_minions(
+    mut commands: Commands,
+    fresh: Query<(Entity, &ChildOf), Added<Minion>>,
+    arenas: Query<&Arena>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    use std::f32::consts::FRAC_PI_2;
+    for (entity, child_of) in &fresh {
+        let Ok(arena) = arenas.get(child_of.parent()) else {
+            continue;
+        };
+        let color = arena.theme().palette().primary;
+        let l = color.to_linear();
+        commands.entity(entity).with_children(|root| {
+            root.spawn((
+                Mesh3d(meshes.add(Cylinder::new(0.11, 0.05))),
+                MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: color,
+                    emissive: LinearRgba::rgb(l.red, l.green, l.blue) * 1.5,
+                    perceptual_roughness: 0.7,
+                    ..default()
+                })),
+                Transform::from_rotation(Quat::from_rotation_x(FRAC_PI_2)),
+            ));
+        });
+    }
 }
 
 /// Applies every arena's [`TileScript`] to the board at its clock's tick: the
@@ -356,6 +481,7 @@ impl Plugin for ScoreSyncPlugin {
         );
         #[cfg(not(target_arch = "wasm32"))]
         app.add_systems(OnEnter(AppState::Intro), reset_loaded)
+            .add_systems(Update, dress_minions.run_if(in_state(AppState::Intro)))
             .add_systems(
                 FixedUpdate,
                 sync_scores

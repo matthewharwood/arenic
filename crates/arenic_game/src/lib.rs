@@ -39,7 +39,7 @@ pub use boss::Boss;
 pub use effect::{EaseKind, EffectKey, EffectKind, EffectPlugin, EffectTrack};
 pub use encounter::{ActiveDifficulty, Difficulty};
 pub use interaction::{InteractionPlugin, Interactive, UiFocus, hidden_outline};
-pub use layer::{ArenaStack, Layer, LayerBinding, LayerId, LayerKind, LayerStack};
+pub use layer::{ArenaStack, Layer, LayerBinding, LayerId, LayerKind, LayerStack, Minion};
 
 use bevy::app::PluginGroupBuilder;
 use bevy::asset::AssetMetaCheck;

@@ -286,12 +286,12 @@ fn handle_r_key(
 /// slot 1 in `intro_scene::fire_holy_nova`.
 fn capture_intent(
     keys: Res<ButtonInput<KeyCode>>,
-    selected: Single<(&ChildOf, Has<Boss>), With<Selected>>,
+    selected: Single<(&ChildOf, Has<Boss>, Has<arenic_game::Minion>), With<Selected>>,
     clocks: Query<&ArenaClock>,
     mut draft: ResMut<DraftTimeline>,
 ) -> Result {
-    let (child_of, is_boss) = *selected;
-    if is_boss {
+    let (child_of, is_boss, is_minion) = *selected;
+    if is_boss || is_minion {
         return Ok(());
     }
     let tick = clocks.get(child_of.parent())?.tick;
