@@ -304,7 +304,7 @@ fn capture_intent(
         if keys.just_pressed(digit) || keys.just_pressed(numpad) {
             draft.events.push(TimelineEvent {
                 tick,
-                action: Action::Ability(slot),
+                action: Action::Ability { slot, aim: None },
             });
         }
     }

@@ -271,7 +271,10 @@ impl From<Action> for ActionDto {
     fn from(action: Action) -> Self {
         match action {
             Action::Move(delta) => ActionDto::Move(delta.x, delta.y),
-            Action::Ability(slot) => ActionDto::Ability { slot, aim: None },
+            Action::Ability { slot, aim } => ActionDto::Ability {
+                slot,
+                aim: aim.map(|a| (a.x, a.y)),
+            },
         }
     }
 }
@@ -280,8 +283,10 @@ impl From<ActionDto> for Action {
     fn from(dto: ActionDto) -> Self {
         match dto {
             ActionDto::Move(x, y) => Action::Move(IVec2::new(x, y)),
-            // `aim` rides the file until ARE-46 plumbs it through `Action`.
-            ActionDto::Ability { slot, .. } => Action::Ability(slot),
+            ActionDto::Ability { slot, aim } => Action::Ability {
+                slot,
+                aim: aim.map(|(x, y)| IVec2::new(x, y)),
+            },
         }
     }
 }
@@ -628,17 +633,19 @@ mod tests {
     }
 
     #[test]
-    fn aim_payload_rides_the_file_format() {
-        // An aimed ability survives the round trip even though Action ignores
-        // it until ARE-46 — and an aim-less row still parses (serde default).
-        let dto = ActionDto::Ability {
+    fn aim_payload_round_trips_action_file_action() {
+        // Sim -> file -> sim preserves the aim exactly…
+        let aimed = Action::Ability {
             slot: 2,
-            aim: Some((1, -1)),
+            aim: Some(IVec2::new(1, -1)),
         };
+        let dto: ActionDto = aimed.into();
         let text = ron::to_string(&dto).unwrap();
-        assert_eq!(ron::from_str::<ActionDto>(&text).unwrap(), dto);
+        let back: Action = ron::from_str::<ActionDto>(&text).unwrap().into();
+        assert_eq!(back, aimed);
+        // …and an aim-less row from an older stack still parses (serde default).
         let legacy: ActionDto = ron::from_str("Ability(slot: 3)").unwrap();
-        assert_eq!(legacy, ActionDto::Ability { slot: 3, aim: None });
+        assert_eq!(Action::from(legacy), Action::Ability { slot: 3, aim: None });
     }
 
     #[cfg(not(target_arch = "wasm32"))]

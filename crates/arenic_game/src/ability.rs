@@ -46,7 +46,8 @@ impl AbilityId {
 /// hero ghost playback, and boss phase loadouts, so a cast always means the
 /// same thing no matter who triggered it. The sound emits FROM the caster
 /// (spatial, against the camera-microphone) shaped by the ability's
-/// [`AbilityId::sfx_profile`].
+/// [`AbilityId::sfx_profile`]. `aim` is the recorded tile-space direction of a
+/// directed cast — radial abilities (Holy Nova) ignore it; beams consume it.
 pub fn cast(
     commands: &mut Commands,
     ability: AbilityId,
@@ -55,8 +56,10 @@ pub fn cast(
     sfx: &AbilitySfx,
     mix: &AudioMix,
     scale: &DefaultSpatialScale,
+    aim: Option<IVec2>,
     caster: Entity,
 ) {
+    let _ = aim; // no directed ability exists yet — the payload plumbs through
     match ability {
         AbilityId::HolyNova => cast_holy_nova(commands, meshes, materials, sfx, mix, scale, caster),
     }

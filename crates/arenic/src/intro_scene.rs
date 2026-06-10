@@ -743,7 +743,7 @@ fn fire_holy_nova(
         let tick = clocks.get(child_of.parent())?.tick;
         draft.events.push(TimelineEvent {
             tick,
-            action: Action::Ability(1),
+            action: Action::Ability { slot: 1, aim: None },
         });
     }
     Ok(())

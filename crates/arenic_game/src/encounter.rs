@@ -138,7 +138,9 @@ impl From<Action> for EventDto {
     fn from(action: Action) -> Self {
         match action {
             Action::Move(delta) => EventDto::Move(delta.x, delta.y),
-            Action::Ability(slot) => EventDto::Ability(slot),
+            // The legacy format predates aim and cannot carry it; legacy files
+            // are a read-only fallback, so nothing authored is ever lost here.
+            Action::Ability { slot, .. } => EventDto::Ability(slot),
         }
     }
 }
@@ -147,7 +149,7 @@ impl From<EventDto> for Action {
     fn from(dto: EventDto) -> Self {
         match dto {
             EventDto::Move(x, y) => Action::Move(IVec2::new(x, y)),
-            EventDto::Ability(slot) => Action::Ability(slot),
+            EventDto::Ability(slot) => Action::Ability { slot, aim: None },
         }
     }
 }
@@ -428,7 +430,7 @@ mod tests {
             start: IVec2::new(3, 4),
             events: vec![TimelineEvent {
                 tick: 5,
-                action: Action::Ability(2),
+                action: Action::Ability { slot: 2, aim: None },
             }]
             .into(),
         };
@@ -505,7 +507,7 @@ mod tests {
                 },
                 TimelineEvent {
                     tick: 90,
-                    action: Action::Ability(3),
+                    action: Action::Ability { slot: 3, aim: None },
                 },
             ]
             .into(),

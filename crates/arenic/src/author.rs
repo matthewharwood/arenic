@@ -182,6 +182,16 @@ fn boss_cast_slots(
         (KeyCode::Digit3, KeyCode::Numpad3, 3),
         (KeyCode::Digit4, KeyCode::Numpad4, 4),
     ];
+    // The press-direction AIM stub (ARE-46): arrows HELD at the moment of a
+    // slot press become the cast's tile-space direction — the keyboard
+    // stand-in for the future press-drag-release mouse gesture. Radial
+    // abilities ignore it; the payload round-trips today.
+    let held = IVec2::new(
+        (keys.pressed(KeyCode::ArrowRight) as i32)
+            .strict_sub(keys.pressed(KeyCode::ArrowLeft) as i32),
+        (keys.pressed(KeyCode::ArrowUp) as i32).strict_sub(keys.pressed(KeyCode::ArrowDown) as i32),
+    );
+    let aim = (held != IVec2::ZERO).then_some(held);
     for (digit, numpad, slot) in SLOTS {
         if !(keys.just_pressed(digit) || keys.just_pressed(numpad)) {
             continue;
@@ -195,13 +205,14 @@ fn boss_cast_slots(
                 &sfx,
                 &mix,
                 &scale,
+                aim,
                 boss,
             );
         }
         if matches!(*state, RecordingState::Recording) {
             draft.events.push(TimelineEvent {
                 tick: clock.tick,
-                action: Action::Ability(slot),
+                action: Action::Ability { slot, aim },
             });
         }
     }

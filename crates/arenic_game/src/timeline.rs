@@ -46,10 +46,15 @@ pub struct TimelineEvent {
 /// a hero ghost casts only slot 1 (slots 2-4 are recorded but inert until more
 /// hero abilities exist); a boss ghost resolves every slot through its phase
 /// loadout ([`crate::encounter::resolve_ability`]).
+///
+/// The event vocabulary stays MONOMORPHIC: richer ability payloads extend this
+/// one enum, never fork it. `aim` is the tile-space direction of a directed
+/// cast (press → drag → release); `None` is an untargeted cast — every ability
+/// that exists today. Integer payloads only (determinism policy).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Move(IVec2),
-    Ability(u8),
+    Ability { slot: u8, aim: Option<IVec2> },
 }
 
 /// One character's committed staff for one arena: the tile it stood on at tick 0
@@ -195,7 +200,7 @@ fn play_timelines(
                         mover.step(&mut transform, delta);
                     }
                 }
-                Action::Ability(slot) => {
+                Action::Ability { slot, aim } => {
                     let is_boss = ghosts.get(ghost).is_ok_and(|(_, _, boss)| boss);
                     // Resolve at the event's RECORDED tick, so an ability keeps
                     // the phase it was authored in even if playback ever lags.
@@ -208,6 +213,7 @@ fn play_timelines(
                             &sfx,
                             &mix,
                             &scale,
+                            aim,
                             ghost,
                         );
                     }
