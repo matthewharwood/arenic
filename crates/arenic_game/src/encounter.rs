@@ -170,7 +170,14 @@ impl BossScoreFile {
     /// (schema drift — refusing loudly beats silently misreading an old take)
     /// or a file that drifted into another `(arena, difficulty)` directory.
     pub fn validate(&self, arena: Arena, difficulty: Difficulty) -> Result<(), ScoreIoError> {
-        validate_header(self.format, self.arena, self.difficulty, arena, difficulty)
+        validate_header(
+            self.format,
+            SCORE_FORMAT,
+            self.arena,
+            self.difficulty,
+            arena,
+            difficulty,
+        )
     }
 
     /// Wraps a committed [`Recording`] for writing.
@@ -205,19 +212,21 @@ impl BossScoreFile {
     }
 }
 
-/// The shared header check behind [`BossScoreFile::validate`] and
-/// [`crate::tile_script::TileScriptFile::validate`]: the file must speak the
-/// reader's [`SCORE_FORMAT`] and belong to the `(arena, difficulty)` directory
-/// it was found in.
+/// The shared header check behind [`BossScoreFile::validate`],
+/// [`crate::tile_script::TileScriptFile::validate`], and
+/// [`crate::layer::LayerScoreFile::validate`]: the file must speak the
+/// reader's `expected` format and belong to the `(arena, difficulty)`
+/// directory it was found in.
 pub(crate) fn validate_header(
     format: u32,
+    expected: u32,
     file_arena: u8,
     file_difficulty: Difficulty,
     arena: Arena,
     difficulty: Difficulty,
 ) -> Result<(), ScoreIoError> {
-    if format != SCORE_FORMAT {
-        return Err(format!("score format {format} (this reader speaks {SCORE_FORMAT})").into());
+    if format != expected {
+        return Err(format!("score format {format} (this reader speaks {expected})").into());
     }
     if file_arena != arena.index() as u8 || file_difficulty != difficulty {
         return Err(format!(

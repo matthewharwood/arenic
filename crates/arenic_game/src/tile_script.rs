@@ -74,7 +74,14 @@ impl TileScriptFile {
     /// Rejects a header the reader can't trust — same contract as
     /// [`crate::encounter::BossScoreFile::validate`].
     pub fn validate(&self, arena: Arena, difficulty: Difficulty) -> Result<(), ScoreIoError> {
-        validate_header(self.format, self.arena, self.difficulty, arena, difficulty)
+        validate_header(
+            self.format,
+            crate::encounter::SCORE_FORMAT,
+            self.arena,
+            self.difficulty,
+            arena,
+            difficulty,
+        )
     }
 }
 

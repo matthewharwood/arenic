@@ -23,6 +23,7 @@ pub mod grid;
 pub mod guildmaster;
 pub mod icon;
 pub mod interaction;
+pub mod layer;
 pub mod orbit;
 pub mod swarm;
 pub mod theme;
@@ -36,6 +37,7 @@ pub use audio::{AudioMix, DesiredMusic, GameAudioPlugin, MusicTarget};
 pub use boss::Boss;
 pub use encounter::{ActiveDifficulty, Difficulty};
 pub use interaction::{InteractionPlugin, Interactive, UiFocus, hidden_outline};
+pub use layer::{Layer, LayerId, LayerKind, LayerStack};
 
 use bevy::app::PluginGroupBuilder;
 use bevy::asset::AssetMetaCheck;
