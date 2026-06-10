@@ -99,8 +99,8 @@ fn tile_editing(mode: Option<Res<TileEditMode>>) -> bool {
 }
 
 /// `true` when any arena's stack changed this frame — re-renders the HUD chip
-/// after commits, paints, publishes, and sync swaps.
-fn stacks_changed(stacks: Query<(), Changed<ArenaStack>>) -> bool {
+/// and the dope sheet after commits, paints, publishes, and sync swaps.
+pub(crate) fn stacks_changed(stacks: Query<(), Changed<ArenaStack>>) -> bool {
     !stacks.is_empty()
 }
 
@@ -383,7 +383,21 @@ fn scrub(
     let target = (clock.tick as i64)
         .strict_add(dir.strict_mul(step))
         .clamp(0, CYCLE_TICKS.strict_sub(1) as i64) as u32;
-    snap_arena_ghosts(arena_entity, &mut ghosts, None);
+    seek_arena(arena_entity, target, &mut clock, &mut timeline, &mut ghosts);
+}
+
+/// Parks `arena` at `target`: every ghost snaps to its start, the master
+/// timeline's `Move` events up to `target` re-apply (abilities are transient
+/// VFX, skipped), and the clock lands there — the ONE deterministic seek the
+/// `,`/`.` keys and the dope-sheet ruler share, so they can never disagree.
+pub(crate) fn seek_arena(
+    arena_entity: Entity,
+    target: u32,
+    clock: &mut ArenaClock,
+    timeline: &mut ArenaTimeline,
+    ghosts: &mut Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
+) {
+    snap_arena_ghosts(arena_entity, ghosts, None);
     let (window, cursor) = seek_window(&timeline.events, target);
     for event in window {
         if let Action::Move(delta) = event.action
@@ -764,7 +778,8 @@ pub(crate) struct AuthorPlugin;
 
 impl Plugin for AuthorPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<TileEditor>()
+        app.add_plugins(crate::dope_sheet::DopeSheetPlugin)
+            .init_resource::<TileEditor>()
             .add_systems(OnEnter(AppState::Intro), setup_author_hud)
             .add_systems(OnExit(AppState::Intro), reset_on_exit)
             .add_systems(

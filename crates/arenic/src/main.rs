@@ -2,6 +2,8 @@
 // game, release, and web builds compile none of it.
 #[cfg(all(feature = "author", not(target_arch = "wasm32")))]
 mod author;
+#[cfg(all(feature = "author", not(target_arch = "wasm32")))]
+mod dope_sheet;
 mod hud;
 mod intro_scene;
 mod modal;

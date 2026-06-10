@@ -175,7 +175,7 @@ fn sync_scores(
 
         match swap {
             Some((version, stack)) => {
-                apply_stack(
+                apply_stack_preview(
                     &mut commands,
                     arena_entity,
                     *arena_id,
@@ -222,9 +222,10 @@ fn sync_scores(
 /// Folds `stack` into the world: recording layers bind (boss layer → the
 /// arena's boss root; minion layers skip until ARE-44 spawns them), the
 /// merged tile schedule becomes the live [`TileScript`], and the arena
-/// restarts so playback begins at tick 0.
+/// restarts so playback begins at tick 0. Shared with the author's dope-sheet
+/// preview (mute/solo re-folds), so preview and replay can never disagree.
 #[cfg(not(target_arch = "wasm32"))]
-fn apply_stack(
+pub(crate) fn apply_stack_preview(
     commands: &mut Commands,
     arena_entity: Entity,
     arena_id: Arena,
