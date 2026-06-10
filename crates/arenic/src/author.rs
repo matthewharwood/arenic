@@ -240,20 +240,22 @@ fn scrub(
     mut arenas: Query<(Entity, &Arena, &mut ArenaClock, &mut ArenaTimeline)>,
     mut ghosts: Query<(&Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
 ) {
-    let dir =
-        (keys.just_pressed(KeyCode::Period) as i64) - (keys.just_pressed(KeyCode::Comma) as i64);
+    let dir = (keys.just_pressed(KeyCode::Period) as i64)
+        .strict_sub(keys.just_pressed(KeyCode::Comma) as i64);
     if dir == 0 {
         return;
     }
     let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
-    let step = if shift { 10 } else { 1 } * TICKS_PER_SECOND as i64;
+    let step = (TICKS_PER_SECOND as i64).strict_mul(if shift { 10 } else { 1 });
     let Some((arena_entity, _, mut clock, mut timeline)) = arenas
         .iter_mut()
         .find(|(_, arena, ..)| arena.index() == current.0)
     else {
         return;
     };
-    let target = (clock.tick as i64 + dir * step).clamp(0, (CYCLE_TICKS - 1) as i64) as u32;
+    let target = (clock.tick as i64)
+        .strict_add(dir.strict_mul(step))
+        .clamp(0, CYCLE_TICKS.strict_sub(1) as i64) as u32;
     for (ghost, child_of, mut mover, mut transform) in ghosts.iter_mut() {
         if child_of.parent() == arena_entity {
             snap_ghost(ghost, &mut mover, &mut transform);
@@ -293,7 +295,7 @@ fn set_marks(
     if keys.just_pressed(KeyCode::KeyO) {
         editor.mark_out = clock.tick.strict_add(1);
         if editor.mark_in >= editor.mark_out {
-            editor.mark_in = editor.mark_out - 1;
+            editor.mark_in = editor.mark_out.strict_sub(1);
         }
     }
 }
@@ -524,7 +526,10 @@ impl Plugin for AuthorPlugin {
                     // save.
                     (
                         move_cursor.run_if(arrow_pressed),
-                        scrub,
+                        scrub.run_if(
+                            input_just_pressed(KeyCode::Period)
+                                .or(input_just_pressed(KeyCode::Comma)),
+                        ),
                         set_marks.run_if(
                             input_just_pressed(KeyCode::KeyI).or(input_just_pressed(KeyCode::KeyO)),
                         ),

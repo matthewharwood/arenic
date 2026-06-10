@@ -13,7 +13,9 @@ use bevy::prelude::*;
 
 use crate::intro_scene::{CurrentArena, Selected};
 use crate::modal::{Choice, ModalLatch, no_modal, spawn_modal};
-use crate::recording::{DraftTimeline, PendingWalk, RecordingState, is_idle, not_counting_down};
+use crate::recording::{
+    DraftTimeline, PendingWalk, RecordingState, is_idle, no_pending_walk, not_counting_down,
+};
 use crate::states::{AppState, not_tile_editing};
 
 /// Moves the SELECTED puck one tile per arrow-key press. Only the selected puck
@@ -178,15 +180,16 @@ fn edge_walk(
     current: &mut CurrentArena,
 ) -> Result {
     let (to_index, col, row) = entry;
-    let Some((to_arena, arena)) = arena_roots.iter().find(|(_, a)| a.index() == to_index) else {
-        return Ok(());
-    };
+    let (to_arena, arena) = arena_roots
+        .iter()
+        .find(|(_, a)| a.index() == to_index)
+        .ok_or("invariant: adjacent_entry returned an arena index with no spawned root")?;
     mover.snap_to(transform, col, row);
     commands.entity(hero).insert(ChildOf(to_arena));
     current.0 = to_index;
 
     // Returning with a staff for this arena? Offer to fold it back in.
-    if library.0.contains_key(&(to_index as u8)) {
+    if library.0.contains_key(arena) {
         let mut clock = clocks.get_mut(to_arena)?;
         let _ = spawn_modal(
             commands,
@@ -266,7 +269,7 @@ impl Plugin for TravelPlugin {
                     arrow_pressed
                         .and(no_modal)
                         .and(not_counting_down)
-                        .and(not(resource_exists::<PendingWalk>))
+                        .and(no_pending_walk)
                         .and(not_tile_editing),
                 ),
                 perform_pending_walk

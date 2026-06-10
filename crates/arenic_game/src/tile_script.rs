@@ -123,12 +123,12 @@ pub fn cells_at(selector: &TileSelector, ticks_in: u32) -> Vec<(u8, u8)> {
             } else {
                 0.0
             };
-            let half_down = (thickness.max(1) as i32 - 1) / 2;
+            let half_down = (thickness.max(1) as i32).strict_sub(1) / 2;
             let half_up = thickness.max(1) as i32 / 2;
             for col in 0..GRID_W {
                 let centre = mid + amplitude * (col as f32 * freq + phase + speed * t).sin();
                 let centre = centre.round() as i32;
-                for row in centre - half_down..=centre + half_up {
+                for row in centre.saturating_sub(half_down)..=centre.saturating_add(half_up) {
                     if (0..GRID_H).contains(&row) {
                         cells.push((col as u8, row as u8));
                     }
@@ -146,7 +146,7 @@ pub fn desired(keyframes: &[TileKeyframe], tick: u32) -> HashMap<(u8, u8), TileK
     let mut out = HashMap::new();
     for keyframe in keyframes {
         if (keyframe.from..keyframe.to).contains(&tick) {
-            for cell in cells_at(&keyframe.selector, tick - keyframe.from) {
+            for cell in cells_at(&keyframe.selector, tick.strict_sub(keyframe.from)) {
                 out.insert(cell, keyframe.kind);
             }
         }

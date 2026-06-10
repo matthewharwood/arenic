@@ -19,7 +19,7 @@ use crate::theme::{ThemeId, Tint};
 /// One of the nine arenas (3×3 grid, row-major). The discriminant IS the grid index.
 /// Also a component: the game tags each arena root with its `Arena`, so systems can
 /// resolve an entity's arena (e.g. a hero's `ChildOf` parent) without a second id.
-#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[component(immutable)]
 pub enum Arena {
     Hunter,
@@ -172,7 +172,7 @@ impl Arena {
             tint,
         };
         let (sky, fg) = self.voices();
-        let (swarm, boss, props): (SwarmSpec, BossSpec, [PropSpec; 3]) = match self {
+        let (swarm, boss, props): (SwarmSpec, BossSpec, [PropSpec; _]) = match self {
             Arena::Hunter => (
                 SwarmSpec {
                     motion: Patrol,

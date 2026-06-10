@@ -79,7 +79,7 @@ pub const PHASE_TICKS: u32 = CYCLE_TICKS / PHASES as u32;
 /// The phase (`0..PHASES`) a cycle tick falls in — the ONE place phase
 /// boundaries live.
 pub fn phase_at(tick: u32) -> usize {
-    ((tick / PHASE_TICKS) as usize).min(PHASES - 1)
+    ((tick / PHASE_TICKS) as usize).min(PHASES.strict_sub(1))
 }
 
 /// One phase's four ability slots.

@@ -3,11 +3,12 @@
 //! each arena its signature fauna motion.
 //!
 //! This module owns the shared **types + math**: the [`Mote`] silhouettes, the
-//! per-arena [`SwarmMotion`] archetypes, the [`SwarmMember`] component, and the pure
+//! per-arena [`SwarmMotion`] archetypes, the [`SwarmMember`] component, the pure
 //! placement/motion functions ([`swarm_home`], [`swarm_amp`], [`swarm_offset`],
-//! [`mote_mesh`], [`swarm_material`]). Each binary keeps its own spawn + animate
-//! systems (the storybook respawns per story + re-tones on theme change; the game
-//! spawns all nine arenas once with baked colours) — both built on these.
+//! [`mote_mesh`], [`swarm_material`]), and the [`animate_swarm`] driver both
+//! binaries register. Each binary keeps only its own *spawn* system (the
+//! storybook respawns per story + re-tones on theme change; the game spawns all
+//! nine arenas once with baked colours) — both built on these.
 
 use std::f32::consts::TAU;
 
@@ -207,6 +208,17 @@ pub fn swarm_offset(motion: SwarmMotion, phase: f32, t: f32, amp: Vec3) -> (Vec3
                 Quat::from_rotation_z(0.5 * s(0.35)),
             )
         }
+    }
+}
+
+/// Drives every [`SwarmMember`]'s drift + spin from its motion archetype — the
+/// shared animate system both binaries register alongside their own spawners.
+pub fn animate_swarm(time: Res<Time>, mut swarm: Query<(&SwarmMember, &mut Transform)>) {
+    let t = time.elapsed_secs() * SWARM_TIME_SCALE;
+    for (m, mut tf) in &mut swarm {
+        let (offset, rot) = swarm_offset(m.motion, m.phase, t, m.amp);
+        tf.translation = m.home + offset;
+        tf.rotation = rot;
     }
 }
 

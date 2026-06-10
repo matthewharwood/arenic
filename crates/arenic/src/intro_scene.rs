@@ -31,8 +31,7 @@ use arenic_game::grid::{
 };
 use arenic_game::guildmaster::guildmaster;
 use arenic_game::swarm::{
-    SWARM_TIME_SCALE, SwarmMember, SwarmSpec, mote_mesh, swarm_amp, swarm_home, swarm_material,
-    swarm_offset,
+    SwarmMember, SwarmSpec, animate_swarm, mote_mesh, swarm_amp, swarm_home, swarm_material,
 };
 use arenic_game::theme::Theme;
 use arenic_game::tile::{ArenaTiles, Tile, TileBoard, TileKind, build_tile_materials};
@@ -548,16 +547,6 @@ fn spawn_props(
             transform,
             ChildOf(arena),
         ));
-    }
-}
-
-/// Drives every [`SwarmMember`]'s drift + spin from its motion archetype.
-fn animate_swarm(time: Res<Time>, mut swarm: Query<(&SwarmMember, &mut Transform)>) {
-    let t = time.elapsed_secs() * SWARM_TIME_SCALE;
-    for (m, mut tf) in &mut swarm {
-        let (offset, rot) = swarm_offset(m.motion, m.phase, t, m.amp);
-        tf.translation = m.home + offset;
-        tf.rotation = rot;
     }
 }
 

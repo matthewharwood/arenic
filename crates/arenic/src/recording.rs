@@ -66,6 +66,7 @@ pub(crate) struct RecordingCommitted {
 
 /// Marks the blue ring child a [`Ghost`] wears (see [`ghost_ring_add`]).
 #[derive(Component)]
+#[component(immutable)]
 struct GhostRing;
 
 /// One element of the REC/clock HUD strip under the top bar.
@@ -179,12 +180,12 @@ fn handle_r_key(
             return Ok(());
         };
         let arena_entity = child_of.parent();
-        let index = arena_ids.get(arena_entity)?.index() as u8;
+        let arena = *arena_ids.get(arena_entity)?;
         (
             arena_entity,
             is_ghost,
             IVec2::new(mover.col, mover.row),
-            library.0.contains_key(&index),
+            library.0.contains_key(&arena),
         )
     };
     let (arena, mut clock, mut timeline) = arenas.get_mut(arena_entity)?;
@@ -405,7 +406,7 @@ fn handle_choice(
                 let mut p0 = heroes.p0();
                 let (_, _, mut library, mut mover, mut transform) = p0.single_mut()?;
                 let (arena, mut clock, mut timeline) = arenas.get_mut(arena_entity)?;
-                library.0.insert(arena.index() as u8, recording.clone());
+                library.0.insert(*arena, recording.clone());
                 fold_as_ghost(
                     &mut commands,
                     hero,
@@ -428,7 +429,7 @@ fn handle_choice(
                 let mut p0 = heroes.p0();
                 let (_, _, library, mut mover, mut transform) = p0.single_mut()?;
                 let (arena, mut clock, mut timeline) = arenas.get_mut(arena_entity)?;
-                let Some(recording) = library.0.get(&(arena.index() as u8)) else {
+                let Some(recording) = library.0.get(arena) else {
                     // No cache after all (shouldn't happen) — at least resume.
                     clock.paused = false;
                     return Ok(());

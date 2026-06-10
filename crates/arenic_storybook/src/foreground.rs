@@ -12,8 +12,7 @@
 use arenic_game::atmosphere::{AtmospherePlugin, CloudFog, Plane, Voice, cloud_material};
 use arenic_game::grid::board_center;
 use arenic_game::swarm::{
-    SWARM_TIME_SCALE, SwarmMember, SwarmSpec, mote_mesh, swarm_amp, swarm_home, swarm_material,
-    swarm_offset,
+    SwarmMember, SwarmSpec, animate_swarm, mote_mesh, swarm_amp, swarm_home, swarm_material,
 };
 use arenic_game::theme::ActiveTheme;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
@@ -214,16 +213,6 @@ fn respawn_swarm(
     }
 }
 
-/// Drives every swarm member's drift + spin from its motion archetype.
-fn animate_swarm(time: Res<Time>, mut swarm: Query<(&SwarmMember, &mut Transform)>) {
-    let t = time.elapsed_secs() * SWARM_TIME_SCALE;
-    for (m, mut tf) in &mut swarm {
-        let (offset, rot) = swarm_offset(m.motion, m.phase, t, m.amp);
-        tf.translation = m.home + offset;
-        tf.rotation = rot;
-    }
-}
-
 /// Re-tones the shared swarm material when the theme changes.
 fn retone_swarm(
     active: Res<ActiveTheme>,
@@ -235,6 +224,6 @@ fn retone_swarm(
     }
 }
 
-// The cloud material (`CloudFog` / `cloud_material`) + the per-motion drift math
-// (`swarm_offset`) and their tests now live in `arenic_game::{atmosphere, swarm}`,
-// shared with the game.
+// The cloud material (`CloudFog` / `cloud_material`), the per-motion drift math
+// (`swarm_offset`), and the shared `animate_swarm` driver (with their tests) now
+// live in `arenic_game::{atmosphere, swarm}`, shared with the game.

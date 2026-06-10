@@ -56,11 +56,11 @@ pub struct Recording {
     pub events: Arc<[TimelineEvent]>,
 }
 
-/// A character's per-arena library of recordings, keyed by arena index — its
+/// A character's per-arena library of recordings, keyed by [`Arena`] — its
 /// staff per arena. Sim code only ever looks up by key; never iterate this for
 /// simulation (HashMap order is nondeterministic).
 #[derive(Component, Default)]
-pub struct RecordingLibrary(pub HashMap<u8, Recording>);
+pub struct RecordingLibrary(pub HashMap<Arena, Recording>);
 
 /// Present while a character is folded into its arena's master timeline: playback
 /// drives it and direct input is ignored. `start` is the tile the ghost snaps to

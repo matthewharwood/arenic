@@ -132,7 +132,7 @@ fn sync_scores(
                             movers.p0().get_mut(boss)
                         {
                             mover.snap_to(&mut transform, recording.start.x, recording.start.y);
-                            library.0.insert(index, recording.clone());
+                            library.0.insert(*arena_id, recording.clone());
                         }
                         commands.entity(boss).insert(Ghost {
                             start: recording.start,
