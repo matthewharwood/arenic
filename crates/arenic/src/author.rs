@@ -25,6 +25,7 @@
 use arenic_game::Boss;
 use arenic_game::ability::{AbilityMeshes, AbilitySfx, cast};
 use arenic_game::arena::Arena;
+use arenic_game::audio::AudioMix;
 use arenic_game::default_font::MonoFont;
 use arenic_game::encounter::{
     ActiveDifficulty, BOSS_PREFIX, BossScoreFile, Difficulty, SCORE_FORMAT, encounter_dir,
@@ -39,6 +40,7 @@ use arenic_game::timeline::{
     Action, ArenaClock, ArenaTimeline, CYCLE_TICKS, Ghost, TICKS_PER_SECOND, TimelineEvent,
     restart, seek_window,
 };
+use bevy::audio::DefaultSpatialScale;
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
@@ -158,6 +160,8 @@ fn boss_cast_slots(
     meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     sfx: Res<AbilitySfx>,
+    mix: Res<AudioMix>,
+    scale: Res<DefaultSpatialScale>,
 ) -> Result {
     let (boss, child_of) = *boss;
     let (arena, clock) = arenas.get(child_of.parent())?;
@@ -172,7 +176,16 @@ fn boss_cast_slots(
             continue;
         }
         if let Some(id) = resolve_ability(true, *arena, difficulty.0, slot, clock.tick) {
-            cast(&mut commands, id, &meshes, &mut materials, &sfx, boss);
+            cast(
+                &mut commands,
+                id,
+                &meshes,
+                &mut materials,
+                &sfx,
+                &mix,
+                &scale,
+                boss,
+            );
         }
         if matches!(*state, RecordingState::Recording) {
             draft.events.push(TimelineEvent {

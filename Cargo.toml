@@ -9,7 +9,9 @@ edition = "2024"
 [workspace.dependencies]
 # `ui_picking` is NOT in Bevy's default feature set; it enables the UI picking
 # backend that drives `Pointer<…>` observer events (and `Interaction`) on UI nodes.
-bevy = { version = "0.18.1", features = ["ui_picking"] }
+# `mp3` decodes the soundtrack files in `assets/music/` (pure-Rust symphonia,
+# wasm-safe); the default set already covers ogg/vorbis for the SFX.
+bevy = { version = "0.18.1", features = ["ui_picking", "mp3"] }
 # The shared game crate. Both binaries (the game and the storybook) depend on it;
 # it never depends on them, so game pieces live here and are reused, not copied.
 arenic_game = { path = "crates/arenic_game" }

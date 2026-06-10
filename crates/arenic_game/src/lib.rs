@@ -15,6 +15,7 @@
 pub mod ability;
 pub mod arena;
 pub mod atmosphere;
+pub mod audio;
 pub mod boss;
 pub mod default_font;
 pub mod encounter;
@@ -31,6 +32,7 @@ pub mod timeline;
 pub mod ui;
 
 pub use ability::AbilityId;
+pub use audio::{AudioMix, DesiredMusic, GameAudioPlugin, MusicTarget};
 pub use boss::Boss;
 pub use encounter::{ActiveDifficulty, Difficulty};
 pub use interaction::{InteractionPlugin, Interactive, UiFocus, hidden_outline};

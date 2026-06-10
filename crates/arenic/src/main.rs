@@ -7,10 +7,12 @@ mod intro_scene;
 mod modal;
 mod recording;
 mod score_sync;
+mod soundtrack;
 mod states;
 mod title_screen;
 mod travel;
 
+use arenic_game::GameAudioPlugin;
 use arenic_game::default_font::DefaultFontPlugin;
 use arenic_game::default_plugins;
 use arenic_game::theme::ActiveTheme;
@@ -22,6 +24,7 @@ use intro_scene::IntroScenePlugin;
 use modal::ModalPlugin;
 use recording::RecordingPlugin;
 use score_sync::ScoreSyncPlugin;
+use soundtrack::SoundtrackPlugin;
 use states::AppState;
 use title_screen::TitleScreenPlugin;
 use travel::TravelPlugin;
@@ -54,7 +57,14 @@ fn main() -> AppExit {
     .add_plugins(RecordingPlugin)
     .add_plugins(TravelPlugin)
     .add_plugins(ScoreSyncPlugin)
-    .add_plugins(HudPlugin);
+    .add_plugins(HudPlugin)
+    // The camera is the microphone: spatial SFX + crossfading music. The
+    // spatial knee sits at the zoomed-in camera height, so the focused arena
+    // is full volume and the rest fall off by inverse-square distance.
+    .add_plugins(GameAudioPlugin {
+        reference_distance: intro_scene::ZOOM_IN,
+    })
+    .add_plugins(SoundtrackPlugin);
     #[cfg(all(feature = "author", not(target_arch = "wasm32")))]
     app.add_plugins(author::AuthorPlugin);
     app.run()

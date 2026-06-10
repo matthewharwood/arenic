@@ -19,6 +19,7 @@
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_8};
 
 use arenic_game::arena::Prim;
+use arenic_game::audio::EAR_GAP;
 use arenic_game::boss::{BossShell, BossSpec, LightBehavior, boss_a};
 use arenic_game::grid::{
     ARENA_H, ARENA_W, GRID_H, GRID_W, GridPlugin, TILE, TileMover, board_center, tile_to_world,
@@ -27,6 +28,7 @@ use arenic_game::guildmaster::guildmaster;
 use arenic_game::orbit::{OrbitCamera, OrbitUnlocked};
 use arenic_game::theme::{ActiveTheme, Theme, Tint};
 use bevy::asset::RenderAssetUsages;
+use bevy::audio::SpatialListener;
 use bevy::camera::RenderTarget;
 use bevy::color::Alpha;
 use bevy::light::ShadowFilteringMethod;
@@ -181,6 +183,9 @@ fn setup_stage(
             brightness: 600.0,
             ..default()
         },
+        // The camera is the microphone, exactly as in the game — ability
+        // stories exercise the real spatial-audio path.
+        SpatialListener::new(EAR_GAP),
         StageCamera,
     ));
 

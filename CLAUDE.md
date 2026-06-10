@@ -98,6 +98,22 @@ feature, never shipped): `B` possesses a boss (record it exactly like a hero),
 `D` cycles difficulty, `T` opens the tile editor (scrub `,`/`.`, marks `I`/`O`,
 paint `Space`, save `W`), `F5` restarts the arena.
 
+## Audio — the camera is the microphone
+
+`arenic_game::audio` is the audio engine (bevy_audio/rodio — works identically
+on web; spatial math is source-side DSP). The camera carries a
+`SpatialListener`; ability sounds emit spatially FROM their caster via
+`play_spatial_sfx` shaped by `AbilityId::sfx_profile()` (volume + `reach`).
+The spatial knee sits at the zoomed-in camera height
+(`GameAudioPlugin::reference_distance`), so the focused arena is full volume,
+neighbours quieter and panned, and the overworld a faint wash. Music: set the
+`DesiredMusic` resource (`MusicTarget::{Theme, Track(arena), Drone, Silence}`)
+and the engine crossfades; the overworld's track is the procedural oscillator
+`DroneSource` (no asset), and zooming out ducks the SFX bus (`AudioMix`).
+Tracks live in `assets/music/` (see its README) — fill an `arena_track()` line
+per new file. Never start audio before the Title screen's first interaction
+(browser autoplay policy).
+
 ## Build automation — no shell scripts
 
 Automation logic goes in the **`xtask`** crate as a subcommand (`cargo xtask

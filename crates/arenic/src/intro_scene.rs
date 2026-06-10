@@ -24,6 +24,7 @@ use arenic_game::Boss;
 use arenic_game::ability::{AbilityMeshes, AbilityPlugin, AbilitySfx, cast_holy_nova};
 use arenic_game::arena::{Arena, PropSpec};
 use arenic_game::atmosphere::{AtmospherePlugin, CloudFog, Plane, cloud_material};
+use arenic_game::audio::{AudioMix, EAR_GAP};
 use arenic_game::boss::{BossSpec, LightBehavior, boss_a, light_offset};
 use arenic_game::grid::{
     ARENA_H, ARENA_W, ARENAS, GRID_H, GRID_W, TILE, TileMover, arena_offset, board_center,
@@ -38,6 +39,7 @@ use arenic_game::tile::{ArenaTiles, Tile, TileBoard, TileKind, build_tile_materi
 use arenic_game::timeline::{
     Action, ArenaClock, ArenaTimeline, Ghost, RecordingLibrary, TimelineEvent,
 };
+use bevy::audio::{DefaultSpatialScale, SpatialListener};
 use bevy::color::Alpha;
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::light::{NotShadowCaster, NotShadowReceiver, ShadowFilteringMethod};
@@ -64,7 +66,7 @@ const BOSS_ROW: i32 = 15;
 /// (`ZOOM = (24, 72)`). Matching them keeps the HUD's local-space framing aligned
 /// with the game's global gamespace; the HUD's side/top/bottom chrome masks the
 /// arena edges, so neighbouring arenas read as framed rather than bleeding in.
-const ZOOM_IN: f32 = 24.0;
+pub(crate) const ZOOM_IN: f32 = 24.0;
 const ZOOM_OUT: f32 = 72.0;
 
 // Per-arena cell layers, in LOCAL space (camera on +Z). The skybox + floor are
@@ -240,6 +242,9 @@ fn setup_intro(
             brightness: 600.0,
             ..default()
         },
+        // The camera IS the microphone: every spatial one-shot pans and
+        // attenuates against these ears (arenic_game::audio).
+        SpatialListener::new(EAR_GAP),
         camera_pose(OVERWORLD, ZOOM_OUT),
     ));
 
@@ -721,9 +726,19 @@ fn fire_holy_nova(
     meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     sfx: Res<AbilitySfx>,
+    mix: Res<AudioMix>,
+    scale: Res<DefaultSpatialScale>,
 ) -> Result {
     let (player, child_of) = *player;
-    cast_holy_nova(&mut commands, &meshes, &mut materials, &sfx, player);
+    cast_holy_nova(
+        &mut commands,
+        &meshes,
+        &mut materials,
+        &sfx,
+        &mix,
+        &scale,
+        player,
+    );
     if matches!(*state, RecordingState::Recording) {
         let tick = clocks.get(child_of.parent())?.tick;
         draft.events.push(TimelineEvent {

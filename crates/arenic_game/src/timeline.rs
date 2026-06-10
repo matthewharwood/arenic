@@ -17,8 +17,11 @@ use std::sync::Arc;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 
+use bevy::audio::DefaultSpatialScale;
+
 use crate::ability::{AbilityMeshes, AbilitySfx, cast};
 use crate::arena::Arena;
+use crate::audio::AudioMix;
 use crate::boss::Boss;
 use crate::encounter::{ActiveDifficulty, resolve_ability};
 use crate::grid::TileMover;
@@ -169,6 +172,8 @@ fn play_timelines(
     meshes: Res<AbilityMeshes>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     sfx: Res<AbilitySfx>,
+    mix: Res<AudioMix>,
+    scale: Res<DefaultSpatialScale>,
 ) {
     for (arena, clock, mut timeline) in &mut arenas {
         if clock.paused {
@@ -195,7 +200,16 @@ fn play_timelines(
                     // Resolve at the event's RECORDED tick, so an ability keeps
                     // the phase it was authored in even if playback ever lags.
                     if let Some(id) = resolve_ability(is_boss, *arena, difficulty.0, slot, tick) {
-                        cast(&mut commands, id, &meshes, &mut materials, &sfx, ghost);
+                        cast(
+                            &mut commands,
+                            id,
+                            &meshes,
+                            &mut materials,
+                            &sfx,
+                            &mix,
+                            &scale,
+                            ghost,
+                        );
                     }
                 }
             }
@@ -244,6 +258,8 @@ impl Plugin for TimelinePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Time::<Fixed>::from_hz(TICK_HZ))
             .init_resource::<ActiveDifficulty>()
+            // Playback casts read the SFX bus; idempotent with GameAudioPlugin.
+            .init_resource::<AudioMix>()
             .add_systems(
                 FixedUpdate,
                 (

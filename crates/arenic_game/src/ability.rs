@@ -8,11 +8,13 @@
 //! [`AbilityPlugin`] to drive the VFX and preload every ability's sound into
 //! [`AbilitySfx`].
 
-use bevy::audio::AudioSource;
+use bevy::audio::{AudioSource, DefaultSpatialScale};
 use bevy::color::Alpha;
 use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::audio::{AudioMix, SfxProfile, play_spatial_sfx};
 
 /// The identity of one castable ability — THE shared data structure for hero
 /// and boss abilities alike. A boss ability is built from the exact same pieces
@@ -25,19 +27,38 @@ pub enum AbilityId {
     HolyNova,
 }
 
+impl AbilityId {
+    /// How this ability SOUNDS across distance ([`SfxProfile`]): its base
+    /// volume, and `reach` — how far it carries past the spatial falloff knee.
+    /// This is where "different tones behave differently" lives; give a new
+    /// ability its own row as it lands.
+    pub fn sfx_profile(self) -> SfxProfile {
+        match self {
+            AbilityId::HolyNova => SfxProfile {
+                volume: 1.0,
+                reach: 1.0,
+            },
+        }
+    }
+}
+
 /// Casts `ability` from `caster` — the ONE dispatch point shared by live input,
 /// hero ghost playback, and boss phase loadouts, so a cast always means the
-/// same thing no matter who triggered it.
+/// same thing no matter who triggered it. The sound emits FROM the caster
+/// (spatial, against the camera-microphone) shaped by the ability's
+/// [`AbilityId::sfx_profile`].
 pub fn cast(
     commands: &mut Commands,
     ability: AbilityId,
     meshes: &AbilityMeshes,
     materials: &mut Assets<StandardMaterial>,
     sfx: &AbilitySfx,
+    mix: &AudioMix,
+    scale: &DefaultSpatialScale,
     caster: Entity,
 ) {
     match ability {
-        AbilityId::HolyNova => cast_holy_nova(commands, meshes, materials, sfx, caster),
+        AbilityId::HolyNova => cast_holy_nova(commands, meshes, materials, sfx, mix, scale, caster),
     }
 }
 
@@ -120,28 +141,31 @@ pub fn update_ability_bursts(
     }
 }
 
-/// Plays a one-shot ability sound that cleans itself up when finished. Fire it
-/// alongside the VFX when an ability casts (the sound is its own entity, so it
-/// plays to completion even after the VFX despawns).
-pub fn play_sfx(commands: &mut Commands, sound: Handle<AudioSource>) {
-    commands.spawn((AudioPlayer::new(sound), PlaybackSettings::DESPAWN));
-}
-
-/// Casts Holy Nova from `caster`: the burst VFX parented to them plus its sound.
-/// Shared by the GAME's live input (`1`) and ghost playback, so live take and
-/// replay can never drift. (The storybook assembles its own theme-tinted variant
-/// from [`holy_nova`] + [`play_sfx`] directly.)
+/// Casts Holy Nova from `caster`: the burst VFX parented to them plus its
+/// sound, emitted spatially FROM the caster. Shared by the GAME's live input
+/// (`1`), ghost playback, and boss loadout playback, so live take and replay
+/// can never drift. (The storybook assembles its own theme-tinted variant
+/// from [`holy_nova`] + [`play_spatial_sfx`] directly.)
 pub fn cast_holy_nova(
     commands: &mut Commands,
     meshes: &AbilityMeshes,
     materials: &mut Assets<StandardMaterial>,
     sfx: &AbilitySfx,
+    mix: &AudioMix,
+    scale: &DefaultSpatialScale,
     caster: Entity,
 ) {
     let holy_gold = Color::srgb(1.0, 0.9, 0.55);
     let burst = holy_nova(meshes.sphere.clone(), materials, holy_gold);
     commands.spawn((burst, ChildOf(caster)));
-    play_sfx(commands, sfx.holy_nova.clone());
+    play_spatial_sfx(
+        commands,
+        sfx.holy_nova.clone(),
+        caster,
+        AbilityId::HolyNova.sfx_profile(),
+        mix,
+        scale,
+    );
 }
 
 /// Every ability's preloaded sound — one handle per ability (an ability is VFX +
