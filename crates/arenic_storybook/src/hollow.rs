@@ -12,12 +12,14 @@
 //! cycled with the `T` key). [`spawn_hollow_boss`] is the one helper a story arm
 //! calls to drop a shell + animated core onto the board.
 
-use std::f32::consts::{FRAC_PI_2, FRAC_PI_3};
+use std::f32::consts::FRAC_PI_2;
 
-use arenic_game::theme::{ActiveTheme, Theme};
+use arenic_game::boss::{LightBehavior, light_offset};
+use arenic_game::theme::{ActiveTheme, Tint};
+use bevy::input::common_conditions::input_just_pressed;
 use bevy::prelude::*;
 
-use crate::layers::{Layer, LayerTag};
+use crate::layers::{Layer, OnLayer};
 use crate::stage::StageContent;
 
 /// HDR emissive scale for a core at full intensity — high enough to bloom.
@@ -64,33 +66,14 @@ impl Tier {
     }
 }
 
-/// The signature light-telegraph motion of each boss primitive.
-#[derive(Clone, Copy)]
-pub enum LightBehavior {
-    /// Hunter — a blade of light sweeps around the four inner walls.
-    ObeliskBlade,
-    /// Alchemist — liquid light rises and falls inside the vessel.
-    CauldronRise,
-    /// Cardinal — the ring fills, resolves, then resets.
-    HaloFill,
-    /// Warrior — a face lights to show the blocked direction.
-    PrismBlock,
-    /// Thief — a narrow beam projects forward and back.
-    WedgeBeam,
-    /// Bard — the filament pulses on the beat.
-    CapsulePulse,
-    /// Forager — light grows upward from the central shaft.
-    ZigguratGrow,
-    /// Merchant — facets flicker semi-randomly (luck / volatility).
-    GeodeShimmer,
-}
-
 /// A glowing inner core: its rest transform (anchor), behavior, and the theme
-/// token its colour follows. Driven by [`animate_hollow_lights`].
+/// token its colour follows. Set once at spawn (immutable); driven by
+/// [`animate_hollow_lights`].
 #[derive(Component)]
+#[component(immutable)]
 pub struct HollowLight {
     pub behavior: LightBehavior,
-    pub color: fn(&Theme) -> Color,
+    pub color: Tint,
     pub rest: Transform,
 }
 
@@ -99,33 +82,37 @@ pub struct HollowLightPlugin;
 
 impl Plugin for HollowLightPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Tier>()
-            .add_systems(Update, (cycle_tier, animate_hollow_lights));
+        app.init_resource::<Tier>().add_systems(
+            Update,
+            (
+                cycle_tier.run_if(input_just_pressed(KeyCode::KeyT)),
+                animate_hollow_lights,
+            ),
+        );
     }
 }
 
 /// Drops a hollow boss onto the board: the dark shell (`arenic_game` glTF,
 /// oriented per §5) plus a separate emissive inner `core_mesh` that
 /// [`animate_hollow_lights`] drives. `core_rest` is relative to the board centre.
-#[allow(clippy::too_many_arguments)]
 pub fn spawn_hollow_boss(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     center: Vec2,
     shell: impl Bundle,
-    shell_tint: fn(&Theme) -> Color,
+    shell_tint: Tint,
     core_mesh: Mesh,
     core_rest: Transform,
     behavior: LightBehavior,
-    color: fn(&Theme) -> Color,
+    color: Tint,
 ) -> Entity {
     // Dark shell — themed via `StageContent` like any other content piece.
     // §5: rotate +90° about X so the authored (Y-up) shell faces the camera.
     commands.spawn((
         shell,
         StageContent { tint: shell_tint },
-        LayerTag(Layer::Boss),
+        OnLayer(Layer::Boss),
         Transform::from_xyz(center.x, center.y, 0.02)
             .with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
     ));
@@ -150,16 +137,14 @@ pub fn spawn_hollow_boss(
                 color,
                 rest,
             },
-            LayerTag(Layer::Boss),
+            OnLayer(Layer::Boss),
         ))
         .id()
 }
 
 /// `T` cycles the difficulty tier (Normal → Heroic → Mythic → …).
-fn cycle_tier(keys: Res<ButtonInput<KeyCode>>, mut tier: ResMut<Tier>) {
-    if keys.just_pressed(KeyCode::KeyT) {
-        *tier = tier.next();
-    }
+fn cycle_tier(mut tier: ResMut<Tier>) {
+    *tier = tier.next();
 }
 
 /// Animates every [`HollowLight`] core: a per-behavior motion + emissive pulse,
@@ -179,7 +164,7 @@ fn animate_hollow_lights(
     let p = time.elapsed_secs() * tier.speed();
     let gain = tier.intensity();
     for (core, mut tf, mat) in &mut cores {
-        let (intensity, offset, rot) = animate(core.behavior, p);
+        let (intensity, offset, rot) = light_offset(core.behavior, p);
         tf.translation = core.rest.translation + offset;
         tf.rotation = core.rest.rotation * rot;
         tf.scale = core.rest.scale;
@@ -191,85 +176,5 @@ fn animate_hollow_lights(
     }
 }
 
-/// Per-behavior `(emissive intensity, position offset, extra rotation)` at phase
-/// `p` (seconds × tier speed). Pure function of time — deterministic, no RNG.
-fn animate(behavior: LightBehavior, p: f32) -> (f32, Vec3, Quat) {
-    use LightBehavior::*;
-    // Unit "rise" helper: a 0..1 sine.
-    let s = |x: f32| 0.5 + 0.5 * x.sin();
-    match behavior {
-        ObeliskBlade => (
-            0.6 + 0.5 * s(p * 3.0),
-            Vec3::new(0.16 * p.cos(), 0.16 * p.sin(), 0.0),
-            Quat::IDENTITY,
-        ),
-        CauldronRise => {
-            let rise = 0.3 * (1.0 - (p * 0.8).cos());
-            (0.45 + 0.9 * rise, Vec3::new(0.0, 0.0, rise), Quat::IDENTITY)
-        }
-        HaloFill => (
-            0.2 + 0.9 * (p * 0.3).fract(),
-            Vec3::ZERO,
-            Quat::from_rotation_z(p),
-        ),
-        PrismBlock => {
-            let a = (p * 0.6).floor() * FRAC_PI_3;
-            (
-                0.45 + 0.5 * s(p * 3.0),
-                Vec3::new(0.12 * a.cos(), 0.12 * a.sin(), 0.0),
-                Quat::IDENTITY,
-            )
-        }
-        WedgeBeam => (
-            0.5 + 0.6 * s(p * 3.0),
-            Vec3::new(0.12 * s(p * 1.5), 0.0, 0.0),
-            Quat::IDENTITY,
-        ),
-        CapsulePulse => {
-            let beat = (p * 4.0).sin().max(0.0);
-            (0.25 + 0.85 * beat * beat, Vec3::ZERO, Quat::IDENTITY)
-        }
-        ZigguratGrow => (
-            0.4 + 0.6 * s(p * 0.8),
-            Vec3::new(0.0, 0.0, 0.08 * p.sin()),
-            Quat::IDENTITY,
-        ),
-        GeodeShimmer => (
-            0.3 + 0.7 * s(p * 7.0) * s(p * 3.3 + 1.0),
-            Vec3::new(0.02 * (p * 11.0).sin(), 0.02 * (p * 9.0).cos(), 0.0),
-            Quat::IDENTITY,
-        ),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const EVERY_BEHAVIOR: [LightBehavior; 8] = [
-        LightBehavior::ObeliskBlade,
-        LightBehavior::CauldronRise,
-        LightBehavior::HaloFill,
-        LightBehavior::PrismBlock,
-        LightBehavior::WedgeBeam,
-        LightBehavior::CapsulePulse,
-        LightBehavior::ZigguratGrow,
-        LightBehavior::GeodeShimmer,
-    ];
-
-    #[test]
-    fn core_intensity_is_never_negative() {
-        // The emissive multiplier feeds bloom; a negative value would invert the
-        // glow. Every telegraph must stay >= 0 across its whole cycle.
-        for (b, behavior) in EVERY_BEHAVIOR.into_iter().enumerate() {
-            for i in 0..400 {
-                let p = i as f32 * 0.25;
-                let (intensity, _, _) = animate(behavior, p);
-                assert!(
-                    intensity >= 0.0,
-                    "behavior #{b} gave negative intensity {intensity}"
-                );
-            }
-        }
-    }
-}
+// The per-behavior motion (`light_offset`) + the difficulty-cycle test live in
+// `arenic_game::boss` now; this module keeps only the storybook's animation system.

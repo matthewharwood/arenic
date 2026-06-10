@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use arenic_game::theme::ActiveTheme;
 use arenic_game::ui::menu_button;
 
 use crate::states::AppState;
@@ -13,9 +14,14 @@ impl Plugin for TitleScreenPlugin {
     }
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, theme: Res<ActiveTheme>) {
+    // The Title state owns its 2D camera (each state owns exactly one camera, so the
+    // UI never fights a sibling camera over the framebuffer).
+    commands.spawn((Camera2d, DespawnOnExit(AppState::Title)));
+
     // Load the title font from `assets/fonts/`.
     let font = asset_server.load("fonts/Migra-Extrabold.ttf");
+    let palette = theme.palette();
 
     // Full-screen column that centers the title and button row.
     let root = commands
@@ -30,27 +36,24 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                 row_gap: Val::Px(40.0),
                 ..default()
             },
+            children![(
+                Text::new("Arenic"),
+                TextFont {
+                    font,
+                    font_size: 128.0,
+                    ..default()
+                },
+                TextColor(palette.text_1()),
+            )],
         ))
         .id();
 
-    let title = commands
-        .spawn((
-            Text::new("Arenic"),
-            TextFont {
-                font,
-                font_size: 128.0,
-                ..default()
-            },
-            TextColor(Color::WHITE),
-        ))
-        .id();
-
-    let start = menu_button(&mut commands, "Start", 28.0);
+    let start = menu_button(&mut commands, &palette, "Start", 28.0);
     commands.entity(start).observe(
         |_: On<Pointer<Click>>, mut next: ResMut<NextState<AppState>>| {
             next.set(AppState::Intro);
         },
     );
 
-    commands.entity(root).add_children(&[title, start]);
+    commands.entity(root).add_child(start);
 }

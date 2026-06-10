@@ -16,14 +16,17 @@
 //!   clickable" affordance — and reverts to the default arrow otherwise;
 //! - an optional neobrutalist hard shadow lifts on hover and collapses on press.
 
+use bevy::input::common_conditions::input_just_pressed;
 use bevy::prelude::*;
 use bevy::ui::Interaction;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
 
 /// The colours (and optional shadow) an [`InteractionPlugin`] applies to a
 /// button across its states. Spawn it alongside `Button`, `BackgroundColor` and
-/// an [`Outline`] (use [`hidden_outline`]).
+/// an [`Outline`] (use [`hidden_outline`]). Set once at spawn (immutable) —
+/// re-theming re-inserts a fresh one.
 #[derive(Component, Clone)]
+#[component(immutable)]
 pub struct Interactive {
     pub rest: Color,
     pub hover: Color,
@@ -74,7 +77,17 @@ pub struct InteractionPlugin;
 impl Plugin for InteractionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<UiFocus>()
-            .add_systems(Update, (focus_on_press, tab_focus, apply_states).chain())
+            .add_systems(
+                Update,
+                (
+                    focus_on_press,
+                    tab_focus.run_if(
+                        input_just_pressed(KeyCode::Tab).and(any_with_component::<Interactive>),
+                    ),
+                    apply_states,
+                )
+                    .chain(),
+            )
             .add_systems(Update, pointer_cursor);
     }
 }
@@ -91,19 +104,15 @@ fn focus_on_press(
     }
 }
 
-/// Tab / Shift+Tab move focus between controls (stable entity order).
+/// Tab / Shift+Tab move focus between controls (stable entity order). The
+/// registration gates on `any_with_component::<Interactive>`; the `entities[next]`
+/// index below relies on that non-empty guarantee.
 fn tab_focus(
     keys: Res<ButtonInput<KeyCode>>,
     mut focus: ResMut<UiFocus>,
     q: Query<Entity, With<Interactive>>,
 ) {
-    if !keys.just_pressed(KeyCode::Tab) {
-        return;
-    }
     let mut entities: Vec<Entity> = q.iter().collect();
-    if entities.is_empty() {
-        return;
-    }
     entities.sort();
     let back = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
     let next = match focus.0.and_then(|f| entities.iter().position(|&e| e == f)) {
@@ -149,19 +158,25 @@ fn apply_states(
     )>,
 ) {
     for (entity, interaction, it, mut bg, mut outline, shadow, transform) in &mut q {
-        bg.0 = match interaction {
+        bg.set_if_neq(BackgroundColor(match interaction {
             Interaction::Pressed => it.active,
             Interaction::Hovered => it.hover,
             Interaction::None => it.rest,
-        };
+        }));
 
-        if focus.0 == Some(entity) {
-            outline.width = Val::Px(2.0);
-            outline.offset = Val::Px(2.0);
-            outline.color = it.focus_ring;
+        let desired = if focus.0 == Some(entity) {
+            Outline {
+                width: Val::Px(2.0),
+                offset: Val::Px(2.0),
+                color: it.focus_ring,
+            }
         } else {
-            outline.color = Color::NONE;
-        }
+            Outline {
+                color: Color::NONE,
+                ..*outline
+            }
+        };
+        outline.set_if_neq(desired);
 
         if let Some((color, offset)) = it.shadow {
             let (shadow_offset, shift) = match interaction {
@@ -170,16 +185,20 @@ fn apply_states(
                 Interaction::None => (offset, 0.0),
             };
             if let Some(mut shadow) = shadow {
-                *shadow = BoxShadow::new(
+                shadow.set_if_neq(BoxShadow::new(
                     color,
                     Val::Px(shadow_offset),
                     Val::Px(shadow_offset),
                     Val::Px(0.0),
                     Val::Px(0.0),
-                );
+                ));
             }
             if let Some(mut transform) = transform {
-                transform.translation = Val2::px(shift, shift);
+                let desired = UiTransform {
+                    translation: Val2::px(shift, shift),
+                    ..*transform
+                };
+                transform.set_if_neq(desired);
             }
         }
     }

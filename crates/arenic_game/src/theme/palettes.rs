@@ -1,11 +1,13 @@
-//! THE 8 THEME PALETTES — generated from engmanager.xyz `critical.css`.
+//! THE 16 THEME PALETTES — 9 generated from engmanager.xyz `critical.css`
+//! plus 7 arena-matched themes hand-ported from daisyUI / Ghostty (ARE-17).
 //!
-//! oklch values are copied verbatim (CSS `L%` -> fraction, chroma & hue as-is),
-//! so the palettes are colour-accurate to the source. Per-theme `border`/`depth`
-//! and the structural radii (`radius_selector/field/box`, px) are carried too —
-//! that's what gives e.g. synthwave/cyberpunk their sharp 0-radius edges.
+//! oklch values in the generated block are copied verbatim (CSS `L%` -> fraction,
+//! chroma & hue as-is); arena-theme oklch values are computed from sRGB hex.
+//! Per-theme `border`/`depth` and the structural radii (`radius_selector/field/box`,
+//! px) are carried too — that's what gives e.g. synthwave/cyberpunk their sharp
+//! 0-radius edges.
 //!
-//! Do not edit by hand; regenerate if the source theme changes.
+//! Do not edit the generated block by hand; regenerate if the source theme changes.
 
 use bevy::prelude::*;
 

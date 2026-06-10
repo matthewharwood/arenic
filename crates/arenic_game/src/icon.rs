@@ -89,7 +89,12 @@ impl Icon {
 
 /// The `(ImageNode, Node)` bundle for an icon: a `size`×`size` square tinted to
 /// `tint`. Use when you want to insert the icon onto an existing entity.
-pub fn icon_bundle(assets: &AssetServer, icon: Icon, size: f32, tint: Color) -> impl Bundle {
+pub fn icon_bundle(
+    assets: &AssetServer,
+    icon: Icon,
+    size: f32,
+    tint: Color,
+) -> impl Bundle + use<> {
     (
         ImageNode {
             image: icon.handle(assets),
@@ -106,6 +111,14 @@ pub fn icon_bundle(assets: &AssetServer, icon: Icon, size: f32, tint: Color) -> 
 }
 
 /// Spawns a tinted icon and returns its entity.
-pub fn icon(commands: &mut Commands, assets: &AssetServer, icon_id: Icon, size: f32, tint: Color) -> Entity {
-    commands.spawn(icon_bundle(assets, icon_id, size, tint)).id()
+pub fn icon(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    icon_id: Icon,
+    size: f32,
+    tint: Color,
+) -> Entity {
+    commands
+        .spawn(icon_bundle(assets, icon_id, size, tint))
+        .id()
 }

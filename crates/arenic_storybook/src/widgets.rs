@@ -4,6 +4,7 @@
 
 use arenic_game::theme::{Theme, scale};
 use bevy::prelude::*;
+use bevy::text::Font;
 
 /// A text node at an explicit size and colour.
 pub fn label(commands: &mut Commands, s: &str, size: f32, color: Color) -> Entity {
@@ -11,6 +12,29 @@ pub fn label(commands: &mut Commands, s: &str, size: f32, color: Color) -> Entit
         .spawn((
             Text::new(s),
             TextFont {
+                font_size: size,
+                ..default()
+            },
+            TextColor(color),
+        ))
+        .id()
+}
+
+/// A **DM Mono** text node — for digit-bearing labels (token values, scale steps,
+/// hex codes) so their digits align (see CLAUDE.md "Fonts"). `mono` is the
+/// [`arenic_game::default_font::MonoFont`] handle.
+pub fn mono_label(
+    commands: &mut Commands,
+    mono: &Handle<Font>,
+    s: &str,
+    size: f32,
+    color: Color,
+) -> Entity {
+    commands
+        .spawn((
+            Text::new(s),
+            TextFont {
+                font: mono.clone(),
                 font_size: size,
                 ..default()
             },
@@ -66,9 +90,11 @@ pub fn subheading(commands: &mut Commands, theme: &Theme, s: &str) -> Entity {
     label(commands, s, scale::font_size::F1, theme.text_2())
 }
 
-/// A colour swatch: a rounded chip of `color` with a name + value caption.
+/// A colour swatch: a rounded chip of `color` with a name + value caption (the
+/// value is a hex code, so it renders in DM Mono).
 pub fn swatch(
     commands: &mut Commands,
+    mono: &Handle<Font>,
     theme: &Theme,
     color: Color,
     name: &str,
@@ -91,7 +117,13 @@ pub fn swatch(
         .id();
 
     let name = label(commands, name, scale::font_size::F00, theme.text_1());
-    let value = label(commands, value, scale::font_size::F00, theme.text_muted());
+    let value = mono_label(
+        commands,
+        mono,
+        value,
+        scale::font_size::F00,
+        theme.text_muted(),
+    );
 
     commands.entity(col).add_children(&[chip, name, value]);
     col

@@ -21,6 +21,12 @@ pub mod scale;
 use bevy::color::Alpha;
 use bevy::prelude::*;
 
+/// A **theme token** — a function picking one semantic colour off the active
+/// [`Theme`] (e.g. `|t| t.brand()`). Lets a piece *follow* the theme rather than
+/// pin a fixed colour; resolved per-arena in the game, re-resolved on theme change
+/// in the storybook.
+pub type Tint = fn(&Theme) -> Color;
+
 /// A complete colour palette plus the per-theme structural knobs. Fields are the
 /// raw *primitive* tokens (oklch); use the methods for *semantic* tokens.
 #[derive(Debug, Clone, Copy)]
@@ -245,24 +251,19 @@ impl ThemeId {
     ];
 
     /// Every theme, in display order: the nine arena themes, then the extras.
-    pub const ALL: [ThemeId; 16] = [
-        ThemeId::TokyoNight,
-        ThemeId::Coffee,
-        ThemeId::Luxury,
-        ThemeId::Forest,
-        ThemeId::GruvboxDark,
-        ThemeId::AyuDark,
-        ThemeId::Abyss,
-        ThemeId::RosePine,
-        ThemeId::Synthwave,
-        ThemeId::Light,
-        ThemeId::Dark,
-        ThemeId::Cyberpunk,
-        ThemeId::Lofi,
-        ThemeId::Dracula,
-        ThemeId::Catppuccin,
-        ThemeId::Gala,
-    ];
+    pub const ALL: [ThemeId; Self::GAME.len() + Self::EXTRA.len()] = {
+        let mut all = [ThemeId::Light; Self::GAME.len() + Self::EXTRA.len()];
+        let mut i = 0;
+        while i < Self::GAME.len() {
+            all[i] = Self::GAME[i];
+            i += 1;
+        }
+        while i < all.len() {
+            all[i] = Self::EXTRA[i - Self::GAME.len()];
+            i += 1;
+        }
+        all
+    };
 
     /// Whether this theme is bound to an arena (in [`ThemeId::GAME`]).
     pub fn is_game(self) -> bool {
@@ -316,7 +317,10 @@ impl ThemeId {
     /// The next theme in [`ThemeId::ALL`], wrapping around — handy for a
     /// "cycle theme" control.
     pub fn next(self) -> ThemeId {
-        let i = ThemeId::ALL.iter().position(|&t| t == self).unwrap_or(0);
+        let i = ThemeId::ALL
+            .iter()
+            .position(|&t| t == self)
+            .expect("invariant: every ThemeId is in ALL");
         ThemeId::ALL[(i + 1) % ThemeId::ALL.len()]
     }
 }

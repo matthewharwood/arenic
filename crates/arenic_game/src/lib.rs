@@ -12,14 +12,22 @@
 //! never the reverse. So anything a binary needs to share lives here and is
 //! `pub`, rather than being duplicated.
 
+pub mod ability;
+pub mod arena;
+pub mod atmosphere;
 pub mod boss;
 pub mod default_font;
+pub mod grid;
 pub mod guildmaster;
 pub mod icon;
 pub mod interaction;
 pub mod orbit;
+pub mod swarm;
 pub mod theme;
+pub mod tile;
 pub mod ui;
+
+pub use interaction::{InteractionPlugin, Interactive, UiFocus, hidden_outline};
 
 use bevy::app::PluginGroupBuilder;
 use bevy::asset::AssetMetaCheck;
