@@ -25,6 +25,7 @@ pub mod orbit;
 pub mod swarm;
 pub mod theme;
 pub mod tile;
+pub mod timeline;
 pub mod ui;
 
 pub use interaction::{InteractionPlugin, Interactive, UiFocus, hidden_outline};

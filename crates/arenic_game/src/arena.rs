@@ -17,7 +17,10 @@ use crate::swarm::{Mote, SwarmMotion, SwarmSpec};
 use crate::theme::{ThemeId, Tint};
 
 /// One of the nine arenas (3×3 grid, row-major). The discriminant IS the grid index.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// Also a component: the game tags each arena root with its `Arena`, so systems can
+/// resolve an entity's arena (e.g. a hero's `ChildOf` parent) without a second id.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
+#[component(immutable)]
 pub enum Arena {
     Hunter,
     Guildmaster,

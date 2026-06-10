@@ -29,14 +29,13 @@ pub struct AbilityBurst {
 /// via the stage's HDR + bloom). Centre it on the caster by spawning it as their
 /// child: `commands.spawn((holy_nova(..), ChildOf(caster)))`.
 pub fn holy_nova(
-    meshes: &mut Assets<Mesh>,
+    sphere: Handle<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     color: Color,
 ) -> impl Bundle + use<> {
     const START: f32 = 0.3;
     const BASE_ALPHA: f32 = 0.4;
     let l = color.to_linear();
-    let mesh = meshes.add(Sphere::new(1.0));
     let material = materials.add(StandardMaterial {
         base_color: color.with_alpha(BASE_ALPHA),
         emissive: LinearRgba::rgb(l.red, l.green, l.blue) * 5.0,
@@ -51,7 +50,7 @@ pub fn holy_nova(
             end_radius: 3.0,
             base_alpha: BASE_ALPHA,
         },
-        Mesh3d(mesh),
+        Mesh3d(sphere),
         MeshMaterial3d(material),
         Transform::from_scale(Vec3::splat(START)),
         NotShadowCaster,
@@ -100,6 +99,23 @@ pub fn play_sfx(commands: &mut Commands, sound: Handle<AudioSource>) {
     commands.spawn((AudioPlayer::new(sound), PlaybackSettings::DESPAWN));
 }
 
+/// Casts Holy Nova from `caster`: the burst VFX parented to them plus its sound.
+/// Shared by the GAME's live input (`1`) and ghost playback, so live take and
+/// replay can never drift. (The storybook assembles its own theme-tinted variant
+/// from [`holy_nova`] + [`play_sfx`] directly.)
+pub fn cast_holy_nova(
+    commands: &mut Commands,
+    meshes: &AbilityMeshes,
+    materials: &mut Assets<StandardMaterial>,
+    sfx: &AbilitySfx,
+    caster: Entity,
+) {
+    let holy_gold = Color::srgb(1.0, 0.9, 0.55);
+    let burst = holy_nova(meshes.sphere.clone(), materials, holy_gold);
+    commands.spawn((burst, ChildOf(caster)));
+    play_sfx(commands, sfx.holy_nova.clone());
+}
+
 /// Every ability's preloaded sound — one handle per ability (an ability is VFX +
 /// SFX). Loaded once at startup by [`AbilityPlugin`] so the first cast has no
 /// hitch; add a field here when you add an ability.
@@ -108,19 +124,30 @@ pub struct AbilitySfx {
     pub holy_nova: Handle<AudioSource>,
 }
 
-/// Preloads every ability's sound effect up front.
-fn load_sfx(mut commands: Commands, assets: Res<AssetServer>) {
+/// Shared ability meshes, built once at startup — every Holy Nova clones ONE
+/// unit-sphere handle instead of allocating a fresh mesh asset per cast (which
+/// would churn `Assets<Mesh>` forever under ghost playback).
+#[derive(Resource)]
+pub struct AbilityMeshes {
+    pub sphere: Handle<Mesh>,
+}
+
+/// Preloads every ability's sound effect + shared meshes up front.
+fn load_assets(mut commands: Commands, assets: Res<AssetServer>, mut meshes: ResMut<Assets<Mesh>>) {
     commands.insert_resource(AbilitySfx {
         holy_nova: assets.load("abilities/holy_nova.ogg"),
     });
+    commands.insert_resource(AbilityMeshes {
+        sphere: meshes.add(Sphere::new(1.0)),
+    });
 }
 
-/// Registers the ability-VFX systems and preloads [`AbilitySfx`].
+/// Registers the ability-VFX systems and preloads [`AbilitySfx`] + [`AbilityMeshes`].
 pub struct AbilityPlugin;
 
 impl Plugin for AbilityPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, load_sfx)
+        app.add_systems(Startup, load_assets)
             .add_systems(Update, update_ability_bursts);
     }
 }

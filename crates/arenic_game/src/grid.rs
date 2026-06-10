@@ -62,13 +62,24 @@ impl TileMover {
         Self { col, row }
     }
 
-    /// Steps this mover by `delta` tiles, clamped to the arena grid, and snaps the
-    /// transform's local X/Y to the new tile centre (local Z is preserved). The ONE
-    /// place movement math lives — `strict_add` so a sim overflow fails loud
-    /// instead of silently wrapping (movement feeds the future record/replay).
+    /// Steps this mover by `delta` tiles, clamped to the arena grid. `strict_add`
+    /// so a sim overflow fails loud instead of silently wrapping (movement feeds
+    /// record/replay).
     pub fn step(&mut self, transform: &mut Transform, delta: IVec2) {
-        self.col = self.col.strict_add(delta.x).clamp(0, MAX_COL);
-        self.row = self.row.strict_add(delta.y).clamp(0, MAX_ROW);
+        self.snap_to(
+            transform,
+            self.col.strict_add(delta.x),
+            self.row.strict_add(delta.y),
+        );
+    }
+
+    /// Parks this mover on tile `(col, row)` (clamped to the arena) and snaps the
+    /// transform's local X/Y to its centre (local Z is preserved). The ONE place
+    /// tile-snapping math lives — stepping, ghost snapping, and edge-walking all
+    /// land here so the policy can never drift.
+    pub fn snap_to(&mut self, transform: &mut Transform, col: i32, row: i32) {
+        self.col = col.clamp(0, MAX_COL);
+        self.row = row.clamp(0, MAX_ROW);
         let p = tile_to_world(self.col, self.row);
         transform.translation.x = p.x;
         transform.translation.y = p.y;

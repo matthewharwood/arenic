@@ -177,6 +177,47 @@ component. Apply the intent, not the absolutism:
   they can desync from their inputs. (Central to arenic's record/replay: store the
   command stream, derive transforms on playback.)
 
+## Query & scheduling efficiency
+
+A query's signature is a **scheduling contract**: Bevy parallelizes by declared
+access, not by what a system happens to touch at runtime. Shape queries so the
+scheduler can do its job. (Run-condition gating and batch-over-lookup iteration
+are covered above — these rules are about the query shape itself.)
+
+- **Fetch only what you need.** Every component in the data tuple is fetched per
+  iteration and widens the access contract. A marker you only test for presence
+  belongs in the filter (`Query<&Transform, With<Selected>>`), never in the data
+  (`Query<(&Transform, &Selected)>`).
+- **`&mut T` only when the system actually mutates T.** Mutable access serializes
+  the system against every other reader/writer of T, and is where spurious
+  change ticks come from. If only a subset mutates, filter to that subset
+  instead of branching over a broad `&mut` query.
+- **Filter before branching.** Prefer a `With<T>`-narrowed system over fetching
+  `Has<T>` and branching in the loop body. `Has<T>` is for the genuine case of
+  ONE system whose per-entity behavior forks (e.g. `move_selected`'s
+  live-vs-ghost fork). `Option<&T>` additionally **widens** the matched set —
+  use it only when the shape really is "this base set, maybe with extra data",
+  never as a lazy substitute for a second, narrower system.
+- **`Changed<T>` is a deref flag, not a value diff.** It fires on every
+  `DerefMut` (and on add) — Bevy never compares old vs new. A system that
+  unconditionally writes re-dirties the world every frame and defeats every
+  downstream `Changed<T>` / `resource_changed` gate. Write-if-changed
+  (`set_if_neq`, or compare before assigning through `Mut`) is the discipline
+  that makes change-detection pipelines actually skip work.
+- **Iterate the smaller set.** When scoping work to one parent, a narrow marker
+  query filtered by `child_of.parent() == target` (tens of ghosts) beats walking
+  the parent's `Children` (thousands of tiles) and probing each — and the
+  reverse holds when the child list is the small side. Pick by cardinality, not
+  by idiom.
+- **Default (table) storage until measured.** Table storage iterates fast;
+  sparse-set trades iteration speed for cheap insert/remove. Don't reach for
+  `#[component(storage = "SparseSet")]` without a profile showing real
+  add/remove churn.
+- **Split systems by job, not into dust.** One system per behavior (capture,
+  movement, playback, HUD) — but ten fragments all mutating the same component
+  just force explicit ordering and serialize anyway. A good system reads: "when
+  this condition holds, operate on exactly this set of entities."
+
 ## Determinism (record/replay)
 
 Arenic is built around recording timelines and replaying them, so simulation code —
