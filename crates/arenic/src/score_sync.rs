@@ -98,17 +98,19 @@ fn sync_scores(
             With<Boss>,
         >,
         Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
+        // Folded into the ParamSet (not a standalone query) so it can't alias
+        // p1 on the inserted `Ghost` — see `apply_stack_preview`.
+        Query<
+            (
+                Entity,
+                &LayerBinding,
+                &ChildOf,
+                &mut TileMover,
+                &mut Transform,
+            ),
+            With<Minion>,
+        >,
     )>,
-    mut minions: Query<
-        (
-            Entity,
-            &LayerBinding,
-            &ChildOf,
-            &mut TileMover,
-            &mut Transform,
-        ),
-        With<Minion>,
-    >,
     mut board: TileBoard,
 ) {
     for (arena_entity, arena_id, mut clock, mut timeline, tile_script, arena_stack) in &mut arenas {
@@ -200,7 +202,6 @@ fn sync_scores(
                     &mut clock,
                     &mut timeline,
                     &mut movers,
-                    &mut minions,
                 );
                 commands
                     .entity(arena_entity)
@@ -227,10 +228,14 @@ fn sync_scores(
                     boss.map(|(entity, ..)| entity),
                 );
                 // Pre-spawned minions belong to the stack — gone with it.
-                for (entity, _, child_of, ..) in &minions {
-                    if child_of.parent() == arena_entity {
-                        commands.entity(entity).despawn();
-                    }
+                let arena_minions: Vec<Entity> = movers
+                    .p2()
+                    .iter()
+                    .filter(|(_, _, child_of, ..)| child_of.parent() == arena_entity)
+                    .map(|(entity, ..)| entity)
+                    .collect();
+                for entity in arena_minions {
+                    commands.entity(entity).despawn();
                 }
                 commands
                     .entity(arena_entity)
@@ -270,17 +275,19 @@ pub(crate) fn apply_stack_preview(
             With<Boss>,
         >,
         Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
+        // Minions carry an inserted `Ghost`, so a standalone mover query would
+        // alias p1 (B0001). As a ParamSet member it is time-exclusive instead.
+        Query<
+            (
+                Entity,
+                &LayerBinding,
+                &ChildOf,
+                &mut TileMover,
+                &mut Transform,
+            ),
+            With<Minion>,
+        >,
     )>,
-    minions: &mut Query<
-        (
-            Entity,
-            &LayerBinding,
-            &ChildOf,
-            &mut TileMover,
-            &mut Transform,
-        ),
-        With<Minion>,
-    >,
 ) {
     // Bind the FIRST effective boss layer to the arena's boss root.
     let boss_layer = stack.effective().find_map(|layer| match &layer.kind {
@@ -297,7 +304,8 @@ pub(crate) fn apply_stack_preview(
     // theirs; new layers spawn bare roots the dresser clothes next frame.
     // Pre-spawning (never mid-cycle churn) keeps Entity-keyed playback valid
     // for the whole cycle (`_docs/AUTHORING_UI.md` §1.4).
-    let mut stale: Vec<(LayerId, Entity)> = minions
+    let mut stale: Vec<(LayerId, Entity)> = movers
+        .p2()
         .iter()
         .filter(|(_, _, child_of, ..)| child_of.parent() == arena_entity)
         .map(|(entity, binding, ..)| (binding.0, entity))
@@ -309,7 +317,7 @@ pub(crate) fn apply_stack_preview(
         let entity = match stale.iter().find(|(id, _)| *id == layer.id) {
             Some(&(_, entity)) => {
                 // Re-pose by hand — its refreshed Ghost lands deferred.
-                if let Ok((.., mut mover, mut transform)) = minions.get_mut(entity) {
+                if let Ok((.., mut mover, mut transform)) = movers.p2().get_mut(entity) {
                     mover.snap_to(
                         &mut transform,
                         minion.recording.start.x,

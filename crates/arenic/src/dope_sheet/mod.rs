@@ -841,17 +841,19 @@ fn refold_preview(
             With<Boss>,
         >,
         Query<(Entity, &Ghost, &ChildOf, &mut TileMover, &mut Transform)>,
+        // Time-exclusive ParamSet member (not a standalone query) so it can't
+        // alias p1 on the minion's inserted `Ghost` — B0001.
+        Query<
+            (
+                Entity,
+                &arenic_game::layer::LayerBinding,
+                &ChildOf,
+                &mut TileMover,
+                &mut Transform,
+            ),
+            With<arenic_game::layer::Minion>,
+        >,
     )>,
-    mut minions: Query<
-        (
-            Entity,
-            &arenic_game::layer::LayerBinding,
-            &ChildOf,
-            &mut TileMover,
-            &mut Transform,
-        ),
-        With<arenic_game::layer::Minion>,
-    >,
 ) {
     for request in requests.read() {
         let Ok((arena_entity, arena_id, mut clock, mut timeline, tile_script, arena_stack)) =
@@ -881,7 +883,6 @@ fn refold_preview(
             &mut clock,
             &mut timeline,
             &mut movers,
-            &mut minions,
         );
     }
 }
