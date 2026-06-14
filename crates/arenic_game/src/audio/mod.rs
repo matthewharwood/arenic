@@ -12,13 +12,15 @@
 //!   Per-sound character comes from [`SfxProfile`]: `volume`, plus `reach`
 //!   dividing the spatial scale so big abilities carry farther.
 //! - **Music**: one [`DesiredMusic`] resource names what should be playing
-//!   ([`MusicTarget`]); the engine crossfades looping sinks toward it
-//!   (~1.2 s exponential approach) and despawns what faded out. The overworld
-//!   target is the procedural [`DroneSource`] — oscillators, no asset. An arena
-//!   [`MusicTarget::Track`] is LOCKED to that arena's 2-minute [`ArenaClock`]
-//!   ([`sync_tracks`]): it drops in at the clock's position, fades out/in across
-//!   the cycle boundary, and re-seeks on a wrap / `F5` restart / dope-sheet seek
-//!   (paused while the clock is, so authoring scrubs don't drift).
+//!   ([`MusicTarget`]); the engine crossfades looping sinks toward it (fast
+//!   ~0.1 s attack so a switch is instant, gentle ~0.4 s release) and despawns
+//!   what faded out. The overworld target is the procedural [`DroneSource`] —
+//!   oscillators, no asset. An arena [`MusicTarget::Track`] is LOCKED to that
+//!   arena's 2-minute [`ArenaClock`] ([`sync_tracks`]): it spawns at position 0
+//!   and is seeked onto the clock the next frame (a native bitstream seek, not a
+//!   main-thread decode-skip), fades out/in across the cycle boundary, and
+//!   re-seeks on a wrap / `F5` restart / dope-sheet seek (paused while the clock
+//!   is, so authoring scrubs don't drift).
 //! - **Mix**: [`AudioMix`] is a tiny SFX bus — the overworld ducks it to
 //!   [`OVERWORLD_SFX`] so the drone "smooths" the distant activity (bevy_audio
 //!   has no filters; duck + mask is the honest substitute until Firewheel).
@@ -51,8 +53,16 @@ pub const EAR_GAP: f32 = 4.0;
 /// SFX bus level while the overworld camera is up — the duck that lets the
 /// drone smooth the distant activity.
 pub const OVERWORLD_SFX: f32 = 0.45;
-/// Time constant of a music crossfade (~95% done in three of these).
+/// Time constant of a music crossfade *fading out* (~95% done in three of
+/// these): gentle tails on the outgoing track and a soft cycle-boundary loop
+/// seam.
 const MUSIC_FADE_TAU: f32 = 0.4;
+/// Time constant of a music crossfade *fading in*. Much faster than the
+/// release, so an arena's track ARRIVES almost immediately on a switch (the
+/// player asked for near-instant onset) while departures stay smooth — a
+/// standard fast-attack / slow-release crossfade. Still a ~0.1 s ramp from
+/// silence, so there's no click.
+const MUSIC_ATTACK_TAU: f32 = 0.1;
 /// Time constant of the SFX bus duck.
 const MIX_TAU: f32 = 0.17;
 /// A music sink below this is silent enough to despawn.
@@ -240,12 +250,20 @@ fn load_music(
 /// detection: a despawn command for a dying channel is deferred, so a
 /// change-gated spawn could see the corpse, skip, and leave the target
 /// permanently silent — self-healing beats edge-triggered here.
+///
+/// A `Track` sink always spawns at **position 0**, then [`sync_tracks`] seeks
+/// it onto the arena clock next frame. It must NOT use
+/// `PlaybackSettings::with_start_position`: bevy applies that via rodio's
+/// `skip_duration`, which eagerly decode-and-discards every sample up to the
+/// offset *on the main thread* inside the audio play system — entering an arena
+/// whose clock is ~100 s deep would stall the whole frame for ~1 s. The seek in
+/// `sync_tracks` is symphonia's native bitstream seek instead (milliseconds),
+/// so the switch stays instant no matter how deep the cycle.
 fn apply_music(
     mut commands: Commands,
     desired: Res<DesiredMusic>,
     assets: Res<MusicAssets>,
     channels: Query<&MusicChannel>,
-    clocks: Query<(&Arena, &ArenaClock)>,
 ) {
     let target = desired.0;
     if channels.iter().any(|channel| channel.0 == target) {
@@ -264,19 +282,18 @@ fn apply_music(
         MusicTarget::Track(arena) => {
             // No file yet -> nothing spawns; the outgoing track fades to silence.
             if let Some(track) = &assets.tracks[arena.index()] {
-                // Drop in at the arena clock's position, so entering mid-cycle
-                // begins the cue at the matching timestamp (tick 0 -> the start).
-                let tick = clocks
-                    .iter()
-                    .find(|(candidate, _)| **candidate == arena)
-                    .map_or(0, |(_, clock)| clock.tick);
+                // Spawn at position 0 (cheap); `sync_tracks` seeks it onto the
+                // live clock next frame via a native seek. `prev_tick: 0` makes
+                // that first sync read as a forward jump, so a mid-cycle entry
+                // lands on the matching timestamp without the main-thread
+                // decode-skip `with_start_position` would cost (see fn doc).
                 commands.spawn((
                     AudioPlayer::new(track.clone()),
-                    settings.with_start_position(tick_seconds(tick)),
+                    settings,
                     MusicChannel(target),
                     TrackSync {
-                        prev_tick: tick,
-                        envelope: cycle_envelope(tick),
+                        prev_tick: 0,
+                        envelope: cycle_envelope(0),
                     },
                 ));
             }
@@ -336,8 +353,11 @@ fn sync_tracks(
 
 /// Eases every music sink toward its place in the crossfade — full level for
 /// the desired target, silence for the rest — and despawns what finished
-/// fading out. Exponential approach: smooth, stateless, web-step tolerant.
-/// The goal is multiplied by [`GlobalVolume`]: bevy bakes it in only at sink
+/// fading out. Exponential approach, stateless, web-step tolerant, with a
+/// **fast attack / slow release**: a sink rising toward its goal uses
+/// [`MUSIC_ATTACK_TAU`] (so a switched-to track is present at once), one
+/// falling away uses [`MUSIC_FADE_TAU`] (smooth tails + a soft loop seam). The
+/// goal is multiplied by [`GlobalVolume`]: bevy bakes it in only at sink
 /// creation, so an absolute `set_volume` here would silently exempt music
 /// from any future master-volume control while SFX still obeyed it.
 fn tend_music(
@@ -347,7 +367,7 @@ fn tend_music(
     global: Res<GlobalVolume>,
     mut channels: Query<(Entity, &MusicChannel, &mut AudioSink, Option<&TrackSync>)>,
 ) {
-    let factor = (time.delta_secs() / MUSIC_FADE_TAU).min(1.0);
+    let dt = time.delta_secs();
     for (entity, channel, mut sink, sync) in &mut channels {
         let wanted = channel.0 == desired.0;
         // A Track channel's cycle-end envelope folds into the crossfade goal, so
@@ -359,7 +379,17 @@ fn tend_music(
             0.0
         };
         let goal = Volume::Linear(level) * global.volume;
-        let next = sink.volume().fade_towards(goal, factor);
+        let current = sink.volume();
+        // Rising = fast attack (instant onset); falling = slow release (gentle
+        // departure and a soft cycle-boundary fade). The envelope folds in here
+        // too: a boundary fade-out lowers the goal, so it reads as "falling".
+        let tau = if goal.to_linear() > current.to_linear() {
+            MUSIC_ATTACK_TAU
+        } else {
+            MUSIC_FADE_TAU
+        };
+        let factor = (dt / tau).min(1.0);
+        let next = current.fade_towards(goal, factor);
         sink.set_volume(next);
         if !wanted && next.to_linear() < SILENCE_FLOOR {
             commands.entity(entity).despawn();
