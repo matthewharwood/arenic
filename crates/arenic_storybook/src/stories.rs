@@ -3,12 +3,91 @@
 //! `arenic_game` piece onto the shared top-down 3D stage (see [`crate::stage`]).
 //! Each builder fills a `content` column using the active [`Theme`].
 
+use arenic_game::action_bar::{
+    ActionBarStyle, action_bar_row, spawn_ability_slot, spawn_record_button,
+};
 use arenic_game::theme::{Theme, ThemeId, scale};
 use arenic_game::{Interactive, hidden_outline};
 use bevy::prelude::*;
 use bevy::text::Font;
 
 use crate::widgets::{column, group, heading, hex, label, mono_label, row, swatch, wrap};
+
+/// Live "knobs" for the Action Bar story (Storybook-style controls). Mutating one
+/// re-renders the story body (it's wired into the body-rebuild trigger in
+/// [`crate::storybook`]).
+#[derive(Resource, Default, Clone, Copy)]
+pub struct ActionBarKnobs {
+    pub border: BorderKnob,
+    pub background: BgKnob,
+}
+
+/// Which token tints the ability-slot borders (Stop always reads in error).
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum BorderKnob {
+    #[default]
+    Primary,
+    Secondary,
+    Tertiary,
+    Black,
+}
+
+impl BorderKnob {
+    const ALL: [BorderKnob; 4] = [Self::Primary, Self::Secondary, Self::Tertiary, Self::Black];
+
+    fn color(self, theme: &Theme) -> Color {
+        match self {
+            Self::Primary => theme.primary,
+            Self::Secondary => theme.secondary,
+            Self::Tertiary => theme.accent,
+            // "Black" = the ink token (text-1): near-black on light themes,
+            // near-white on dark ones, so it stays a strong neutral outline.
+            Self::Black => theme.text_1(),
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Primary => "primary",
+            Self::Secondary => "secondary",
+            Self::Tertiary => "tertiary",
+            Self::Black => "black",
+        }
+    }
+}
+
+/// Whether the boxes carry a solid surface fill or are empty (transparent).
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum BgKnob {
+    #[default]
+    Filled,
+    Empty,
+}
+
+impl BgKnob {
+    const ALL: [BgKnob; 2] = [Self::Filled, Self::Empty];
+
+    fn color(self, theme: &Theme) -> Color {
+        match self {
+            Self::Filled => theme.surface_3(),
+            Self::Empty => Color::NONE,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Filled => "filled",
+            Self::Empty => "empty",
+        }
+    }
+}
+
+/// One thing a knob chip writes when clicked.
+#[derive(Clone, Copy)]
+enum KnobSet {
+    Border(BorderKnob),
+    Background(BgKnob),
+}
 
 /// Every selectable story.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -18,7 +97,8 @@ pub enum StoryId {
     Spacing,
     Radii,
     Elevation,
-    Components,
+    Buttons,
+    ActionBar,
     // The nine arenas, in 3×3 grid order (class — arena); see the rulebook.
     Guildmaster,
     Hunter,
@@ -41,7 +121,8 @@ impl StoryId {
             StoryId::Spacing => "Spacing",
             StoryId::Radii => "Radii",
             StoryId::Elevation => "Elevation",
-            StoryId::Components => "Components",
+            StoryId::Buttons => "Buttons",
+            StoryId::ActionBar => "Action Bar",
             StoryId::Guildmaster => "Guildmaster — Guild House",
             StoryId::Hunter => "Hunter — Labyrinth",
             StoryId::Alchemist => "Alchemist — Crucible",
@@ -66,7 +147,8 @@ impl StoryId {
             | StoryId::Spacing
             | StoryId::Radii
             | StoryId::Elevation
-            | StoryId::Components => false,
+            | StoryId::Buttons
+            | StoryId::ActionBar => false,
             StoryId::Guildmaster
             | StoryId::Hunter
             | StoryId::Alchemist
@@ -98,6 +180,7 @@ pub fn render(
     mono: &Handle<Font>,
     story: Option<StoryId>,
     stage: &Handle<Image>,
+    knobs: ActionBarKnobs,
 ) {
     let Some(story) = story else {
         let hint = label(
@@ -119,7 +202,8 @@ pub fn render(
         StoryId::Spacing => spacing(commands, content, theme, mono),
         StoryId::Radii => radii(commands, content, theme),
         StoryId::Elevation => elevation(commands, content, theme, mono),
-        StoryId::Components => components(commands, content, theme),
+        StoryId::Buttons => buttons(commands, content, theme),
+        StoryId::ActionBar => action_bar(commands, content, theme, mono, knobs),
         StoryId::Guildmaster => stage_story(
             commands,
             content,
@@ -470,7 +554,7 @@ fn elevation(commands: &mut Commands, content: Entity, theme: &Theme, mono: &Han
     commands.entity(content).add_children(&[grid]);
 }
 
-fn components(commands: &mut Commands, content: Entity, theme: &Theme) {
+fn buttons(commands: &mut Commands, content: Entity, theme: &Theme) {
     // Buttons row (neobrutalist: 2px text-1 border + hard shadow). Each is
     // interactive — hover lifts, active presses, focus shows a ring — via the
     // shared `Interactive` driver, themed from the active palette.
@@ -570,6 +654,149 @@ fn components(commands: &mut Commands, content: Entity, theme: &Theme) {
     commands
         .entity(content)
         .add_children(&[buttons, badges, card]);
+}
+
+/// The in-game action bar, lifted out of the intro-scene HUD into a live
+/// showcase: the four numbered ability slots + the Stop control, on radius-`L`
+/// (16px) boxes. Two rows of [Storybook-style knobs](ActionBarKnobs) sit above
+/// it — the slot border token (primary / secondary / tertiary / black) and the
+/// box fill (filled / empty). Every box is a themed `Interactive` button, so
+/// hover/press/focus are all live; Stop always reads in the error colour. Built
+/// from [`arenic_game::action_bar`], the exact same builders the game uses, so
+/// the two can never drift.
+fn action_bar(
+    commands: &mut Commands,
+    content: Entity,
+    theme: &Theme,
+    mono: &Handle<Font>,
+    knobs: ActionBarKnobs,
+) {
+    // --- Knob controls -----------------------------------------------------
+    let border_knob = knob_group(
+        commands,
+        theme,
+        "Border",
+        BorderKnob::ALL
+            .into_iter()
+            .map(|b| (b.label(), knobs.border == b, KnobSet::Border(b))),
+    );
+    let bg_knob = knob_group(
+        commands,
+        theme,
+        "Background",
+        BgKnob::ALL
+            .into_iter()
+            .map(|g| (g.label(), knobs.background == g, KnobSet::Background(g))),
+    );
+
+    // --- The bar itself, driven by the current knob selection --------------
+    let style = ActionBarStyle {
+        radius: scale::radius::L,
+        slot_borders: [knobs.border.color(theme); 4],
+        record_border: theme.error,
+        record_label: theme.error,
+        record_hotkey: theme.error,
+        background: knobs.background.color(theme),
+        interactive: true,
+    };
+    let names = ["Block", "Bash", "Taunt", "Barrier"];
+    let bar = commands.spawn(action_bar_row()).id();
+    for (i, name) in names.iter().enumerate() {
+        spawn_ability_slot(
+            commands,
+            bar,
+            theme,
+            mono,
+            (i + 1) as u8,
+            &style,
+            Some(name),
+        );
+    }
+    spawn_record_button(commands, bar, theme, mono, &style, "Stop", false);
+
+    let caption = label(
+        commands,
+        "Lifted from the intro-scene HUD. The knobs pick the slot border token and \
+         box fill; Stop always reads in error. Hover / press / focus any box. Pick a \
+         theme up top to re-tone everything.",
+        scale::font_size::F00,
+        theme.text_muted(),
+    );
+    commands
+        .entity(content)
+        .add_children(&[border_knob, bg_knob, bar, caption]);
+}
+
+/// A labelled row of knob chips (one per choice). The active choice reads in the
+/// brand colour; clicking a chip writes the new selection (see [`knob_chip`]).
+fn knob_group(
+    commands: &mut Commands,
+    theme: &Theme,
+    title: &str,
+    chips: impl Iterator<Item = (&'static str, bool, KnobSet)>,
+) -> Entity {
+    let group = row(commands, scale::space::XS);
+    let tag = label(commands, title, scale::font_size::F00, theme.text_muted());
+    commands.entity(tag).insert(Node {
+        width: Val::Px(90.0),
+        ..default()
+    });
+    commands.entity(group).add_children(&[tag]);
+    for (text, active, set) in chips {
+        let chip = knob_chip(commands, theme, text, active, set);
+        commands.entity(group).add_children(&[chip]);
+    }
+    group
+}
+
+/// One clickable knob chip. Selected chips carry a brand border + selected tint;
+/// every chip is a themed `Interactive` button. Clicking writes `set` into
+/// [`ActionBarKnobs`] (guarded so re-clicking the active chip is a no-op), which
+/// re-renders the story body with the new selection.
+fn knob_chip(
+    commands: &mut Commands,
+    theme: &Theme,
+    text: &str,
+    active: bool,
+    set: KnobSet,
+) -> Entity {
+    let bg = if active {
+        theme.selected_tint()
+    } else {
+        theme.surface_2()
+    };
+    let border = if active {
+        theme.brand()
+    } else {
+        theme.border_subtle()
+    };
+    let (hover, press) = theme.interactions(bg);
+    let chip = commands
+        .spawn((
+            Button,
+            Node {
+                padding: UiRect::axes(Val::Px(scale::space::XS), Val::Px(scale::space::XS3)),
+                border: UiRect::all(Val::Px(1.5)),
+                border_radius: BorderRadius::all(Val::Px(scale::radius::S)),
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(bg),
+            BorderColor::all(border),
+            Interactive::flat(bg, hover, press, theme.focus_ring()),
+            hidden_outline(),
+        ))
+        .id();
+    let t = label(commands, text, scale::font_size::F00, theme.text_1());
+    commands.entity(chip).add_children(&[t]);
+    commands.entity(chip).observe(
+        move |_: On<Pointer<Click>>, mut knobs: ResMut<ActionBarKnobs>| match set {
+            KnobSet::Border(b) if knobs.border != b => knobs.border = b,
+            KnobSet::Background(g) if knobs.background != g => knobs.background = g,
+            _ => {}
+        },
+    );
+    chip
 }
 
 /// Renders a 3D story: a caption plus a framed 16:9 viewport showing the live

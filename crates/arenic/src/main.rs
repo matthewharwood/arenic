@@ -19,7 +19,7 @@ mod score_sync;
 mod settings;
 mod soundtrack;
 mod states;
-mod title_screen;
+mod title;
 mod travel;
 
 use arenic_game::GameAudioPlugin;
@@ -40,7 +40,7 @@ use score_sync::ScoreSyncPlugin;
 use settings::{Settings, SettingsPlugin};
 use soundtrack::SoundtrackPlugin;
 use states::AppState;
-use title_screen::TitleScreenPlugin;
+use title::TitleScreenPlugin;
 use travel::TravelPlugin;
 
 fn main() -> AppExit {

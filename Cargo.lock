@@ -6485,6 +6485,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "resvg",
+ "ron",
+ "serde",
+ "symphonia",
  "tiny-skia 0.12.0",
  "ureq",
  "usvg",

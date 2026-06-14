@@ -13,6 +13,7 @@
 //! `pub`, rather than being duplicated.
 
 pub mod ability;
+pub mod action_bar;
 pub mod arena;
 pub mod atmosphere;
 pub mod audio;

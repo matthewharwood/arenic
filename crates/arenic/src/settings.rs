@@ -13,9 +13,9 @@ use bevy::ui::UiScale;
 use bevy::window::PrimaryWindow;
 use serde::{Deserialize, Serialize};
 
+use arenic_game::action_bar::{ActionBarStyle, action_bar_row, spawn_ability_slot};
 use arenic_game::default_font::MonoFont;
-use arenic_game::theme::ActiveTheme;
-use arenic_game::ui::menu_button;
+use arenic_game::theme::ThemeId;
 
 use crate::states::AppState;
 
@@ -129,17 +129,23 @@ fn apply_resolution(
 }
 
 /// Builds the settings screen: a heading, the live resolution line, the
-/// 720p/1080p pickers, and Back — styled with the same [`menu_button`] as the
-/// title.
-fn setup_settings_screen(
-    mut commands: Commands,
-    theme: Res<ActiveTheme>,
-    mono: Res<MonoFont>,
-    mode: Res<ResolutionMode>,
-) {
-    // Each top screen owns one camera (so the UI never fights a sibling).
-    commands.spawn((Camera2d, DespawnOnExit(AppState::Settings)));
-    let palette = theme.palette();
+/// 720p/1080p pickers, and Back — all the LIGHT-theme numbered action boxes the
+/// title uses (`ActionBarStyle::menu`), so the corner number on each doubles as
+/// its `1`/`2`/`3` keyboard hint (see [`handle_number_keys`]).
+fn setup_settings_screen(mut commands: Commands, mono: Res<MonoFont>, mode: Res<ResolutionMode>) {
+    // Match the title's deliberate light look (LIGHT palette, not ActiveTheme).
+    let palette = ThemeId::Light.palette();
+
+    // Each top screen owns one camera (so the UI never fights a sibling). Clear
+    // to the light paper so the whole panel reads on white like the title.
+    commands.spawn((
+        Camera2d,
+        Camera {
+            clear_color: ClearColorConfig::Custom(palette.surface_1()),
+            ..default()
+        },
+        DespawnOnExit(AppState::Settings),
+    ));
 
     let root = commands
         .spawn((
@@ -177,38 +183,65 @@ fn setup_settings_screen(
         ))
         .id();
 
-    // The two pickers, side by side.
-    let hd = menu_button(&mut commands, &palette, "720p", 24.0);
+    let style = ActionBarStyle::menu(&palette);
+
+    // The two resolution pickers (1, 2), side by side.
+    let row = commands.spawn((ChildOf(root), action_bar_row())).id();
+    let hd = spawn_ability_slot(
+        &mut commands,
+        row,
+        &palette,
+        &mono.0,
+        1,
+        &style,
+        Some("720p"),
+    );
     commands
         .entity(hd)
         .insert(ModeButton(ResolutionMode::Hd))
         .observe(pick_mode);
-    let fhd = menu_button(&mut commands, &palette, "1080p", 24.0);
+    let fhd = spawn_ability_slot(
+        &mut commands,
+        row,
+        &palette,
+        &mono.0,
+        2,
+        &style,
+        Some("1080p"),
+    );
     commands
         .entity(fhd)
         .insert(ModeButton(ResolutionMode::FullHd))
         .observe(pick_mode);
-    let row = commands
-        .spawn(Node {
-            column_gap: Val::Px(16.0),
-            ..default()
-        })
-        .id();
-    commands.entity(row).add_children(&[hd, fhd]);
 
-    let back = menu_button(&mut commands, &palette, "Back", 24.0);
+    // Back (3) on its own row below the pickers.
+    let back = spawn_ability_slot(
+        &mut commands,
+        root,
+        &palette,
+        &mono.0,
+        3,
+        &style,
+        Some("Back"),
+    );
     commands.entity(back).observe(
         |_: On<Pointer<Click>>, mut next: ResMut<NextState<AppState>>| {
             next.set(AppState::Title);
         },
     );
-
-    commands.entity(root).add_children(&[row, back]);
 }
 
-/// A resolution picker was clicked: adopt its mode and persist it. The live
-/// window + UI resize follow via [`apply_resolution`]; the status line via
-/// [`refresh_res_label`].
+/// Adopts `picked` as the resolution and persists it (no-op if unchanged, so the
+/// change-detection-gated [`apply_resolution`] / [`refresh_res_label`] only fire
+/// on a real switch). The live window + UI resize follow.
+fn select_mode(mode: &mut ResMut<ResolutionMode>, picked: ResolutionMode) {
+    if **mode != picked {
+        **mode = picked;
+        Settings { resolution: picked }.save();
+    }
+}
+
+/// A resolution picker was clicked: adopt its mode.
 fn pick_mode(
     click: On<Pointer<Click>>,
     picks: Query<&ModeButton>,
@@ -217,9 +250,22 @@ fn pick_mode(
     let Ok(&ModeButton(picked)) = picks.get(click.entity) else {
         return;
     };
-    if *mode != picked {
-        *mode = picked;
-        Settings { resolution: picked }.save();
+    select_mode(&mut mode, picked);
+}
+
+/// `1` / `2` pick 720p / 1080p and `3` goes Back to the title — the numbered
+/// hint on each action box. Numpad digits work too.
+fn handle_number_keys(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut mode: ResMut<ResolutionMode>,
+    mut next: ResMut<NextState<AppState>>,
+) {
+    if keys.just_pressed(KeyCode::Digit1) || keys.just_pressed(KeyCode::Numpad1) {
+        select_mode(&mut mode, ResolutionMode::Hd);
+    } else if keys.just_pressed(KeyCode::Digit2) || keys.just_pressed(KeyCode::Numpad2) {
+        select_mode(&mut mode, ResolutionMode::FullHd);
+    } else if keys.just_pressed(KeyCode::Digit3) || keys.just_pressed(KeyCode::Numpad3) {
+        next.set(AppState::Title);
     }
 }
 
@@ -247,8 +293,11 @@ impl Plugin for SettingsPlugin {
         .add_systems(OnEnter(AppState::Settings), setup_settings_screen)
         .add_systems(
             Update,
-            refresh_res_label
-                .run_if(resource_changed::<ResolutionMode>.and(in_state(AppState::Settings))),
+            (
+                handle_number_keys,
+                refresh_res_label.run_if(resource_changed::<ResolutionMode>),
+            )
+                .run_if(in_state(AppState::Settings)),
         );
     }
 }

@@ -24,7 +24,7 @@ use bevy::prelude::*;
 use crate::hollow::Tier;
 use crate::layers::LayerVisibility;
 use crate::stage::{Stage3d, StagePlugin};
-use crate::stories::{self, StoryId};
+use crate::stories::{self, ActionBarKnobs, StoryId};
 
 pub struct StorybookPlugin;
 
@@ -34,6 +34,7 @@ impl Plugin for StorybookPlugin {
             .init_resource::<CurrentStory>()
             .init_resource::<SidebarCollapsed>()
             .init_resource::<OpenMenu>()
+            .init_resource::<ActionBarKnobs>()
             .add_plugins(StagePlugin)
             .add_systems(Startup, setup_shell)
             .add_systems(
@@ -46,7 +47,9 @@ impl Plugin for StorybookPlugin {
                     rebuild_body.run_if(
                         resource_changed::<ActiveTheme>
                             .or(resource_changed::<CurrentStory>)
-                            .or(resource_changed::<SidebarCollapsed>),
+                            .or(resource_changed::<SidebarCollapsed>)
+                            // Flipping an Action Bar knob re-renders the story body.
+                            .or(resource_changed::<ActionBarKnobs>),
                     ),
                     // The NAV is a handful of nodes and reflects everything, so it can
                     // refill on any of these without touching the body.
@@ -133,7 +136,13 @@ const TREE: &[Folder] = &[
             ("spacing", StoryId::Spacing, Icon::Ruler),
             ("radii", StoryId::Radii, Icon::Box),
             ("elevation", StoryId::Elevation, Icon::Layers),
-            ("components", StoryId::Components, Icon::Component),
+        ],
+    ),
+    (
+        "components",
+        &[
+            ("buttons", StoryId::Buttons, Icon::Component),
+            ("action bar", StoryId::ActionBar, Icon::Layers),
         ],
     ),
     (
@@ -252,6 +261,7 @@ fn rebuild_body(
     mono: Res<MonoFont>,
     current: Res<CurrentStory>,
     collapsed: Res<SidebarCollapsed>,
+    knobs: Res<ActionBarKnobs>,
     host: Single<Entity, With<BodyHost>>,
 ) {
     let host = *host;
@@ -297,6 +307,7 @@ fn rebuild_body(
         &mono.0,
         current.0,
         &stage.image,
+        *knobs,
     );
 
     let mut children = Vec::with_capacity(2);

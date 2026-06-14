@@ -48,7 +48,8 @@ fn arena_of(story: StoryId) -> Option<Arena> {
         | StoryId::Spacing
         | StoryId::Radii
         | StoryId::Elevation
-        | StoryId::Components
+        | StoryId::Buttons
+        | StoryId::ActionBar
         | StoryId::HolyNova => None,
     }
 }

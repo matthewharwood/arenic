@@ -15,6 +15,12 @@ usvg = "0.47.0"
 tiny-skia = "0.12.0"
 # Pure-Rust HTTPS (rustls by default; no system OpenSSL).
 ureq = "3.3.0"
+# Pure-Rust mp3 decode for `cargo xtask beats` (same decoder Bevy uses); the FFT
+# is hand-rolled (no rustfft) to keep the tool dep-light. serde/ron bake the
+# detected beat grid + the generated title choreography to versioned RON.
+symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
+serde = { workspace = true }
+ron = { workspace = true }
 
 [lints]
 workspace = true

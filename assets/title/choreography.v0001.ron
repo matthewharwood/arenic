@@ -1,0 +1,4052 @@
+(
+    grid_w: 32,
+    grid_h: 18,
+    cycle_ticks: 6991,
+    agents: [
+        (
+            spawn_tick: 8,
+            despawn_tick: 249,
+            start: (0, 14),
+            steps: [
+                (
+                    tick: 56,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 104,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 152,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 201,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 201,
+            despawn_tick: 2129,
+            start: (31, 6),
+            steps: [
+                (
+                    tick: 249,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 297,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 345,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 393,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 442,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 490,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 538,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 586,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 634,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 683,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 731,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 779,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 827,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 876,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 924,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 972,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1020,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1068,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1117,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1165,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1213,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1261,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1309,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1358,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1406,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1454,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1502,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1551,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1599,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1647,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1695,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1743,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1792,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1840,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1888,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1936,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1984,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2033,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2081,
+                    dx: 0,
+                    dy: 1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 393,
+            despawn_tick: 1792,
+            start: (8, 0),
+            steps: [
+                (
+                    tick: 442,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 490,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 538,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 586,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 634,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 683,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 731,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 779,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 827,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 876,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 924,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 972,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1020,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1068,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1117,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1165,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1213,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1261,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1309,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1358,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1406,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1454,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1502,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1551,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1599,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1647,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1695,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1743,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 490,
+            despawn_tick: 827,
+            start: (25, 0),
+            steps: [
+                (
+                    tick: 538,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 586,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 634,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 683,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 731,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 779,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 683,
+            despawn_tick: 924,
+            start: (0, 13),
+            steps: [
+                (
+                    tick: 731,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 779,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 827,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 876,
+                    dx: 0,
+                    dy: 1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 924,
+            despawn_tick: 2852,
+            start: (7, 0),
+            steps: [
+                (
+                    tick: 972,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1020,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1068,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1117,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1165,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1213,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1261,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1309,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1358,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1406,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1454,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1502,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1551,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1599,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1647,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1695,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1743,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1792,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1840,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1888,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1936,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1984,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2033,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2081,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2129,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2177,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2226,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2274,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2322,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2370,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2418,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2467,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2515,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2563,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2611,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2659,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2708,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2756,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2804,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 1020,
+            despawn_tick: 1599,
+            start: (11, 17),
+            steps: [
+                (
+                    tick: 1068,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1117,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1165,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1213,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1261,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1309,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1358,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1406,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1454,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1502,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1551,
+                    dx: -1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 1261,
+            despawn_tick: 2997,
+            start: (31, 2),
+            steps: [
+                (
+                    tick: 1309,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1358,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1406,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1454,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1502,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1551,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1599,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1647,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1695,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1743,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1792,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1840,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1888,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1936,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1984,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2033,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2081,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2129,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2177,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2226,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2274,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2322,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2370,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2418,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2467,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2515,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2563,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2611,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2659,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2708,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2756,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2804,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2852,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2901,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2949,
+                    dx: -1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 1406,
+            despawn_tick: 1792,
+            start: (5, 17),
+            steps: [
+                (
+                    tick: 1454,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 1502,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 1551,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1599,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1647,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1695,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1743,
+                    dx: -1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 1599,
+            despawn_tick: 2226,
+            start: (22, 0),
+            steps: [
+                (
+                    tick: 1647,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1695,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1743,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1792,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1840,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1888,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1936,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 1984,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2033,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2081,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2129,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2177,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 1743,
+            despawn_tick: 3817,
+            start: (0, 2),
+            steps: [
+                (
+                    tick: 1792,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1840,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1888,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1936,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 1984,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2033,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2081,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2129,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2177,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2226,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2274,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2322,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2370,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2418,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2467,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2515,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2563,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2611,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2659,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2708,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2756,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2804,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2852,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2901,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2949,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2997,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3045,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3093,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3142,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3190,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3238,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3286,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3334,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3383,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3431,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3479,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3527,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3576,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3624,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3672,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3720,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3768,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 1936,
+            despawn_tick: 2274,
+            start: (0, 11),
+            steps: [
+                (
+                    tick: 1984,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2033,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2081,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2129,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2177,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 2226,
+                    dx: 0,
+                    dy: 1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 2129,
+            despawn_tick: 4154,
+            start: (31, 15),
+            steps: [
+                (
+                    tick: 2177,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2226,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2274,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2322,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2370,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2418,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2467,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2515,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2563,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2611,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2659,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2708,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2756,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2804,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2852,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2901,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2949,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2997,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3045,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3093,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3142,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3190,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3238,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3286,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3334,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3383,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3431,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3479,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3527,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3576,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3624,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3672,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3720,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3768,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3817,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3865,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3913,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3961,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4009,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4058,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4106,
+                    dx: -1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 2274,
+            despawn_tick: 2515,
+            start: (0, 3),
+            steps: [
+                (
+                    tick: 2322,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2370,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2418,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2467,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 2418,
+            despawn_tick: 3768,
+            start: (9, 17),
+            steps: [
+                (
+                    tick: 2467,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2515,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2563,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2611,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2659,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2708,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2756,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2804,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2852,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2901,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2949,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2997,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3045,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3093,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3142,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3190,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3238,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3286,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3334,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3383,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3431,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3479,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3527,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3576,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3624,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3672,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3720,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 2611,
+            despawn_tick: 3865,
+            start: (20, 17),
+            steps: [
+                (
+                    tick: 2659,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2708,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2756,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2804,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2852,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2901,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2949,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 2997,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3045,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3093,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3142,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3190,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3238,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3286,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3334,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3383,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3431,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3479,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3527,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3576,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3624,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3672,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3720,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3768,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3817,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 2756,
+            despawn_tick: 3045,
+            start: (0, 5),
+            steps: [
+                (
+                    tick: 2804,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2852,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2901,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2949,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 2997,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 2949,
+            despawn_tick: 3190,
+            start: (31, 14),
+            steps: [
+                (
+                    tick: 2997,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3045,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3093,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3142,
+                    dx: -1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 3093,
+            despawn_tick: 4443,
+            start: (4, 17),
+            steps: [
+                (
+                    tick: 3142,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3190,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3238,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3286,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3334,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3383,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3431,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3479,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3527,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3576,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3624,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3672,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3720,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3768,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3817,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3865,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3913,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3961,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4009,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4058,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4106,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4154,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4202,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4251,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4299,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4347,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4395,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 3334,
+            despawn_tick: 4877,
+            start: (0, 15),
+            steps: [
+                (
+                    tick: 3383,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3431,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3479,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3527,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3576,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3624,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3672,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3720,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3768,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3817,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3865,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3913,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3961,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4009,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4058,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4106,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4154,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4202,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4251,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4299,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4347,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4395,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4443,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4492,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4540,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4588,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4636,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4684,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4733,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4781,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4829,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 3479,
+            despawn_tick: 4926,
+            start: (25, 0),
+            steps: [
+                (
+                    tick: 3527,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3576,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3624,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3672,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3720,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3768,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3817,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3865,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3913,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3961,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4009,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4058,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4106,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4154,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4202,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4251,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4299,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4347,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4395,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4443,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4492,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4540,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4588,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4636,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4684,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4733,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4781,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4829,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4877,
+                    dx: -1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 3672,
+            despawn_tick: 4588,
+            start: (16, 0),
+            steps: [
+                (
+                    tick: 3720,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3768,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3817,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 3865,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3913,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 3961,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4009,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4058,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4106,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4154,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4202,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4251,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4299,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4347,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4395,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4443,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4492,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4540,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 3817,
+            despawn_tick: 4588,
+            start: (0, 15),
+            steps: [
+                (
+                    tick: 3865,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3913,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 3961,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4009,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4058,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4106,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4154,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4202,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4251,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4299,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4347,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4395,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4443,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4492,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4540,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 3961,
+            despawn_tick: 4443,
+            start: (22, 0),
+            steps: [
+                (
+                    tick: 4009,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4058,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4106,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4154,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4202,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4251,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4299,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4347,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4395,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 4202,
+            despawn_tick: 6083,
+            start: (2, 0),
+            steps: [
+                (
+                    tick: 4251,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4299,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4347,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4395,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4443,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4492,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4540,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4588,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4636,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 4684,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4733,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4781,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4829,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4877,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4926,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4974,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5022,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5070,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5118,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5167,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5215,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5263,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5311,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5359,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5408,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5456,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5504,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5552,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5601,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5649,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5697,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5745,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5793,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5842,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5890,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5938,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5986,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6034,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 4347,
+            despawn_tick: 5890,
+            start: (0, 7),
+            steps: [
+                (
+                    tick: 4395,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4443,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4492,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4540,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4588,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4636,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4684,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4733,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4781,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4829,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4877,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4926,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4974,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5022,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5070,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5118,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5167,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5215,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5263,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5311,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5359,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5408,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5456,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5504,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5552,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5601,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5649,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5697,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5745,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5793,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5842,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 4492,
+            despawn_tick: 4974,
+            start: (0, 9),
+            steps: [
+                (
+                    tick: 4540,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4588,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4636,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4684,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4733,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4781,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4829,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4877,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4926,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 4684,
+            despawn_tick: 5601,
+            start: (0, 12),
+            steps: [
+                (
+                    tick: 4733,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4781,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4829,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4877,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4926,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 4974,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5022,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5070,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5118,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5167,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5215,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5263,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5311,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5359,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 5408,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 5456,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 5504,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 5552,
+                    dx: 0,
+                    dy: 1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 4829,
+            despawn_tick: 5697,
+            start: (7, 17),
+            steps: [
+                (
+                    tick: 4877,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4926,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 4974,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5022,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5070,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5118,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5167,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5215,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5263,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5311,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5359,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5408,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5456,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5504,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5552,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5601,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5649,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 5070,
+            despawn_tick: 6991,
+            start: (31, 14),
+            steps: [
+                (
+                    tick: 5118,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5167,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5215,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5263,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5311,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5359,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5408,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5456,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5504,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5552,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5601,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5649,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5697,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5745,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5793,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5842,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5890,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5938,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5986,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6034,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6083,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6131,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6179,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6227,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6276,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6324,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6372,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6420,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6468,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6517,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6565,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6613,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6661,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6709,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6758,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6806,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6854,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6902,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6951,
+                    dx: -1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 5263,
+            despawn_tick: 6468,
+            start: (0, 9),
+            steps: [
+                (
+                    tick: 5311,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5359,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5408,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5456,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5504,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5552,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5601,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5649,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5697,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5745,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5793,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5842,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5890,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5938,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5986,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6034,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6083,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6131,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6179,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6227,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6276,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6324,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6372,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6420,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 5408,
+            despawn_tick: 6179,
+            start: (20, 17),
+            steps: [
+                (
+                    tick: 5456,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5504,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5552,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5601,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5649,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5697,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5745,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5793,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5842,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5890,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5938,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5986,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6034,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6083,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6131,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 5552,
+            despawn_tick: 6227,
+            start: (31, 9),
+            steps: [
+                (
+                    tick: 5601,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5649,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5697,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5745,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5793,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5842,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5890,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5938,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 5986,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6034,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6083,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6131,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6179,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 5697,
+            despawn_tick: 6565,
+            start: (14, 0),
+            steps: [
+                (
+                    tick: 5745,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 5793,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 5842,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 5890,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5938,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5986,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6034,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6083,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6131,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6179,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6227,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6276,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6324,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6372,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6420,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6468,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6517,
+                    dx: -1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 5890,
+            despawn_tick: 6991,
+            start: (0, 10),
+            steps: [
+                (
+                    tick: 5938,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 5986,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6034,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6083,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6131,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6179,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6227,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6276,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6324,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6372,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6420,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6468,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6517,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6565,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6613,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6661,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6709,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6758,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6806,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6854,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6902,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6951,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 6083,
+            despawn_tick: 6517,
+            start: (0, 8),
+            steps: [
+                (
+                    tick: 6131,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6179,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6227,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6276,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6324,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6372,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6420,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6468,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 6276,
+            despawn_tick: 6991,
+            start: (19, 17),
+            steps: [
+                (
+                    tick: 6324,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6372,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6420,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6468,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6517,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6565,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6613,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6661,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6709,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6758,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6806,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6854,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6902,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6951,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 6468,
+            despawn_tick: 6991,
+            start: (27, 0),
+            steps: [
+                (
+                    tick: 6517,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6565,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6613,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6661,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6709,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6758,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6806,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6854,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 6902,
+                    dx: 0,
+                    dy: 1,
+                ),
+                (
+                    tick: 6951,
+                    dx: 0,
+                    dy: 1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 6613,
+            despawn_tick: 6991,
+            start: (31, 12),
+            steps: [
+                (
+                    tick: 6661,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6709,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6758,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6806,
+                    dx: -1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6854,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6902,
+                    dx: 0,
+                    dy: -1,
+                ),
+                (
+                    tick: 6951,
+                    dx: 0,
+                    dy: -1,
+                ),
+            ],
+        ),
+        (
+            spawn_tick: 6806,
+            despawn_tick: 6991,
+            start: (19, 0),
+            steps: [
+                (
+                    tick: 6854,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6902,
+                    dx: 1,
+                    dy: 0,
+                ),
+                (
+                    tick: 6951,
+                    dx: 1,
+                    dy: 0,
+                ),
+            ],
+        ),
+    ],
+)

@@ -11,10 +11,18 @@
 //!   recording begins, the countdown timer slides in and ticks the 2-minute
 //!   cycle down in `mm:ss:cs`.
 //!
-//! Everything themes to the focused arena (like the REC strip), and the literal
-//! sizes below are 720-base px — `UiScale` scales them for the 1080 mode.
+//! The *view* (boxes, slots, timer pill) lives in [`arenic_game::action_bar`] so
+//! the storybook can render the same widget; this module owns only the live
+//! wiring — building the bar on Intro entry and the systems that fill +
+//! re-theme it. Everything themes to the focused arena (like the REC strip), and
+//! the literal sizes are 720-base px — `UiScale` scales them for the 1080 mode.
 
 use arenic_game::Boss;
+use arenic_game::action_bar::{
+    AbilitySlot, ActionBarStyle, GAP, REVEAL_SPEED, RecordButton, RecordPart, RecordTimer,
+    SlotRole, SlotText, TIMER_SLIDE, TimerInk, TimerReveal, action_bar_row, spawn_ability_slot,
+    spawn_record_button,
+};
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
 use arenic_game::encounter::{ActiveDifficulty, resolve_ability};
@@ -26,98 +34,13 @@ use crate::intro_scene::{CurrentArena, Selected};
 use crate::recording::{RecordClicked, RecordingState};
 use crate::states::AppState;
 
-/// 720-base geometry (UiScale handles 1080). Buttons are 56×56, radius 12.
-const SLOT: f32 = 56.0;
-const RADIUS: f32 = 12.0;
-const BORDER: f32 = 1.5;
-const GAP: f32 = 8.0;
-const TIMER_W: f32 = 100.0;
-const TIMER_H: f32 = 44.0;
-/// How far the timer slides in from (px), and how fast the reveal eases (1/s).
-const TIMER_SLIDE: f32 = 14.0;
-const REVEAL_SPEED: f32 = 7.0;
-
-/// One of the four numbered ability slots, plus the role each text node plays.
-#[derive(Component, Clone, Copy)]
-#[component(immutable)]
-struct SlotText {
-    slot: u8,
-    role: SlotRole,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum SlotRole {
-    Name,
-    Number,
-}
-
-/// The bordered box of an ability slot (re-themed as focus moves).
-#[derive(Component)]
-#[component(immutable)]
-struct AbilitySlot;
-
-/// The record button box (its border colour tracks the recording state).
-#[derive(Component)]
-#[component(immutable)]
-struct RecordButton;
-
-/// A text node on the record control + which line it is.
-#[derive(Component, Clone, Copy)]
-#[component(immutable)]
-enum RecordPart {
-    /// `Record` / `Stop`.
-    Label,
-    /// The `R` hotkey hint.
-    Hotkey,
-    /// The `mm:ss:cs` countdown string.
-    Timer,
-}
-
-/// The countdown pill — slides + fades in when recording starts.
-#[derive(Component)]
-#[component(immutable)]
-struct RecordTimer;
-
-/// The countdown digits inside the pill (their alpha is the reveal).
-#[derive(Component)]
-#[component(immutable)]
-struct TimerInk;
-
-/// 0 → hidden, 1 → fully shown. [`animate_timer`] eases it toward the target.
-#[derive(Component)]
-struct TimerReveal(f32);
-
-fn mono(mono: &MonoFont, size: f32) -> TextFont {
-    TextFont {
-        font: mono.0.clone(),
-        font_size: size,
-        ..default()
-    }
-}
-
-fn sans(size: f32) -> TextFont {
-    TextFont {
-        font_size: size,
-        ..default()
-    }
-}
-
-/// A small corner badge node (the slot number / the `R` hotkey), bottom-right.
-fn corner() -> Node {
-    Node {
-        position_type: PositionType::Absolute,
-        bottom: Val::Px(4.0),
-        right: Val::Px(5.0),
-        ..default()
-    }
-}
-
 /// Builds the bar once per Intro entry; the update systems fill + re-theme it.
 fn setup_hotbar(mut commands: Commands, mono_font: Res<MonoFont>, current: Res<CurrentArena>) {
     let theme = Arena::from_index(current.0)
         .expect("invariant: CurrentArena is a valid arena index")
         .theme()
         .palette();
+    let style = ActionBarStyle::game(&theme);
 
     let root = commands
         .spawn((
@@ -130,122 +53,35 @@ fn setup_hotbar(mut commands: Commands, mono_font: Res<MonoFont>, current: Res<C
                 bottom: Val::Px(11.0),
                 left: Val::Px(0.0),
                 width: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                column_gap: Val::Px(GAP),
-                ..default()
+                ..action_bar_row()
             },
         ))
         .id();
 
-    // --- Four ability slots ------------------------------------------------
+    // Four ability slots — empty/hidden until `update_slots` fills them.
     for slot in 1..=4u8 {
-        commands
-            .spawn((
-                AbilitySlot,
-                Pickable::IGNORE,
-                ChildOf(root),
-                slot_box(),
-                BackgroundColor(theme.surface_3()),
-                BorderColor::all(theme.border_subtle()),
-            ))
-            .with_children(|box_| {
-                box_.spawn((
-                    SlotText {
-                        slot,
-                        role: SlotRole::Name,
-                    },
-                    Text::new(""),
-                    sans(11.0),
-                    TextColor(theme.text_1()),
-                    Visibility::Hidden,
-                ));
-                box_.spawn((
-                    SlotText {
-                        slot,
-                        role: SlotRole::Number,
-                    },
-                    Text::new(""),
-                    mono(&mono_font, 9.0),
-                    TextColor(theme.primary),
-                    corner(),
-                    Visibility::Hidden,
-                ));
-            });
+        spawn_ability_slot(
+            &mut commands,
+            root,
+            &theme,
+            &mono_font.0,
+            slot,
+            &style,
+            None,
+        );
     }
 
-    // --- Record control + timer -------------------------------------------
-    commands
-        .spawn((
-            RecordButton,
-            Button,
-            ChildOf(root),
-            slot_box(),
-            BackgroundColor(theme.surface_3()),
-            BorderColor::all(theme.border_muted()),
-        ))
-        .observe(record_click)
-        .with_children(|btn| {
-            btn.spawn((
-                RecordPart::Label,
-                Text::new("Record"),
-                sans(12.0),
-                TextColor(theme.text_1()),
-            ));
-            btn.spawn((
-                RecordPart::Hotkey,
-                Text::new("R"),
-                mono(&mono_font, 9.0),
-                TextColor(theme.text_muted()),
-                corner(),
-            ));
-            // The pill is parented to the button but absolutely placed to its
-            // right, so revealing it never shifts the slot row.
-            btn.spawn((
-                RecordTimer,
-                TimerReveal(0.0),
-                Pickable::IGNORE,
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Percent(100.0),
-                    top: Val::Px((SLOT - TIMER_H) * 0.5),
-                    margin: UiRect::left(Val::Px(GAP)),
-                    width: Val::Px(TIMER_W),
-                    height: Val::Px(TIMER_H),
-                    border: UiRect::all(Val::Px(BORDER)),
-                    border_radius: BorderRadius::all(Val::Px(RADIUS)),
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    overflow: Overflow::clip(),
-                    ..default()
-                },
-                BackgroundColor(theme.surface_3().with_alpha(0.0)),
-                BorderColor::all(theme.error.with_alpha(0.0)),
-            ))
-            .with_children(|pill| {
-                pill.spawn((
-                    RecordPart::Timer,
-                    TimerInk,
-                    Text::new("02:00:00"),
-                    mono(&mono_font, 16.0),
-                    TextColor(theme.error.with_alpha(0.0)),
-                ));
-            });
-        });
-}
-
-fn slot_box() -> Node {
-    Node {
-        width: Val::Px(SLOT),
-        height: Val::Px(SLOT),
-        border: UiRect::all(Val::Px(BORDER)),
-        border_radius: BorderRadius::all(Val::Px(RADIUS)),
-        flex_direction: FlexDirection::Column,
-        justify_content: JustifyContent::Center,
-        align_items: AlignItems::Center,
-        ..default()
-    }
+    // Record control + countdown pill; click drives the same flow as `R`.
+    let record = spawn_record_button(
+        &mut commands,
+        root,
+        &theme,
+        &mono_font.0,
+        &style,
+        "Record",
+        true,
+    );
+    commands.entity(record).observe(record_click);
 }
 
 /// Clicking the record button drives the same flow as the `R` key

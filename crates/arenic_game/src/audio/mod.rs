@@ -283,16 +283,19 @@ fn apply_music(
             // No file yet -> nothing spawns; the outgoing track fades to silence.
             if let Some(track) = &assets.tracks[arena.index()] {
                 // Spawn at position 0 (cheap); `sync_tracks` seeks it onto the
-                // live clock next frame via a native seek. `prev_tick: 0` makes
-                // that first sync read as a forward jump, so a mid-cycle entry
-                // lands on the matching timestamp without the main-thread
-                // decode-skip `with_start_position` would cost (see fn doc).
+                // live clock next frame via a native seek. `prev_tick: u32::MAX`
+                // forces that first sync to ALWAYS seek (any tick < MAX reads as a
+                // jump), so entering an arena — by pagination OR by walking a
+                // character across the boundary — resumes the track at the arena
+                // clock's exact timestamp, never from 0 unless the clock is 0.
+                // (No `with_start_position`: bevy applies it via a main-thread
+                // decode-skip that would stall the frame deep in a cycle.)
                 commands.spawn((
                     AudioPlayer::new(track.clone()),
                     settings,
                     MusicChannel(target),
                     TrackSync {
-                        prev_tick: 0,
+                        prev_tick: u32::MAX,
                         envelope: cycle_envelope(0),
                     },
                 ));
