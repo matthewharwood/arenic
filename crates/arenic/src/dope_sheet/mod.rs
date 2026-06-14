@@ -23,7 +23,9 @@
 //! modal G/ripple, ease ops, the inline interpolation panel) is [`edit`].
 //! Author-feature only; nothing here ships.
 
+mod dock;
 mod edit;
+mod rename;
 
 use edit::{KeyPill, RowFocus, SelKey, SheetSelection};
 
@@ -47,6 +49,7 @@ use bevy::color::Alpha;
 
 use crate::author::{seek_arena, stacks_changed};
 use crate::intro_scene::{CurrentArena, Selected};
+use crate::layer_edit::LayerEditor;
 use crate::modal::no_modal;
 use crate::recording::fmt_tick;
 use crate::score_sync::apply_stack_preview;
@@ -411,7 +414,9 @@ fn rebuild_sheet(
     let Some(stack) = stack else {
         commands.entity(*channels).with_children(|col| {
             col.spawn((
-                Text::new("no stack — record (R) or paint (T·Space)"),
+                Text::new(
+                    "no layers yet\n\nM — add a minion\nT, then Space — paint tiles\nB, R — possess + record a boss\n( [ , ] switch arena )",
+                ),
                 mono_text(10.0),
                 TextColor(theme.text_muted()),
                 Node {
@@ -779,36 +784,22 @@ fn toggle_collapsed(mut view: ResMut<SheetView>, mut body: Single<&mut Node, Wit
     };
 }
 
-/// Click handling for the M/S/L row toggles: flips the layer field on the
-/// focused arena's draft stack; mute/solo re-fold the preview.
+/// Click handling for the M/S/L row toggles: funnels each flip through the
+/// reusable [`LayerEditor`] (mute is a save + re-fold; solo re-folds only; lock
+/// is session-only).
 fn row_toggles(
-    mut presses: Query<(&Interaction, &RowToggle), Changed<Interaction>>,
+    presses: Query<(&Interaction, &RowToggle), Changed<Interaction>>,
     current: Res<CurrentArena>,
-    mut stacks: Query<(Entity, &Arena, &mut ArenaStack)>,
-    mut refold: MessageWriter<RefoldPreview>,
+    mut editor: LayerEditor,
 ) {
-    for (interaction, toggle) in &mut presses {
+    for (interaction, toggle) in &presses {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        let Some((arena_entity, _, mut stack)) = stacks
-            .iter_mut()
-            .find(|(_, arena, _)| arena.index() == current.0)
-        else {
-            continue;
-        };
-        let Some(layer) = stack.stack.layer_mut(toggle.layer) else {
-            continue;
-        };
         match toggle.kind {
-            ToggleKind::Mute => layer.muted = !layer.muted,
-            ToggleKind::Solo => layer.solo = !layer.solo,
-            ToggleKind::Lock => layer.locked = !layer.locked,
-        }
-        if toggle.kind != ToggleKind::Lock {
-            refold.write(RefoldPreview {
-                arena: arena_entity,
-            });
+            ToggleKind::Mute => editor.toggle_muted(current.0, toggle.layer),
+            ToggleKind::Solo => editor.toggle_solo(current.0, toggle.layer),
+            ToggleKind::Lock => editor.toggle_locked(current.0, toggle.layer),
         }
     }
 }
@@ -894,6 +885,12 @@ pub(crate) struct DopeSheetPlugin;
 impl Plugin for DopeSheetPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(edit::EditPlugin)
+            // Author-only window growth: dock the sheet in a strip BELOW the
+            // arena instead of over it (`dock` pins the arena camera, grows the
+            // window, and is DPI- + resolution-aware).
+            .add_plugins(dock::plugin)
+            // Right-click → Rename a layer (ARE-47): edits the draft Layer.name.
+            .add_plugins(rename::plugin)
             .init_resource::<SheetView>()
             .add_message::<RefoldPreview>()
             .add_systems(OnEnter(AppState::Intro), setup_sheet)
@@ -910,7 +907,7 @@ impl Plugin for DopeSheetPlugin {
                     update_playhead,
                     scrub_on_ruler,
                     view_keys.run_if(no_modal),
-                    toggle_collapsed.run_if(input_just_pressed(KeyCode::Backquote)),
+                    toggle_collapsed.run_if(input_just_pressed(KeyCode::Backquote).and(no_modal)),
                     row_toggles,
                     refold_preview.run_if(on_message::<RefoldPreview>),
                 )

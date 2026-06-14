@@ -52,7 +52,8 @@ use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::prelude::*;
 
 use crate::hud::TOP_BAR_PX;
-use crate::intro_scene::{CurrentArena, Puck, Selected};
+use crate::intro_scene::{ArenaSelection, CurrentArena, Hero, Selected};
+use crate::layer_edit::{LayerEditPlugin, LayerEditor};
 use crate::modal::no_modal;
 use crate::recording::{
     DraftTimeline, RecordingCommitted, RecordingState, fmt_tick, is_idle, no_pending_walk,
@@ -110,59 +111,76 @@ pub(crate) fn stacks_changed(stacks: Query<(), Changed<ArenaStack>>) -> bool {
     !stacks.is_empty()
 }
 
-/// `B` — possess the current arena's boss, or release a possessed one back to
-/// puck 0 (focus follows the selection both ways, like Tab). The Guild House
-/// has no boss; there B does nothing.
+/// `B` — possess the current arena's boss (then step through its minions), or,
+/// past the roster's end, release control back to the arena's hero (its
+/// remembered one, else its first, else nobody). With nothing — or a hero —
+/// selected, `B` jumps straight onto the boss. An arena with no boss/minion
+/// (the Guild House) leaves `B` a no-op.
 fn possess_boss(
     mut commands: Commands,
-    mut current: ResMut<CurrentArena>,
-    selected: Single<(Entity, Has<Boss>, Has<Minion>), With<Selected>>,
+    current: Res<CurrentArena>,
+    selection: Res<ArenaSelection>,
+    selected: Option<Single<(Entity, Has<Boss>, Has<Minion>), With<Selected>>>,
     possessables: Query<
         (Entity, &ChildOf, Has<Boss>, Option<&LayerBinding>),
         Or<(With<Boss>, With<Minion>)>,
     >,
-    pucks: Query<(Entity, &Puck, &ChildOf)>,
+    heroes: Query<(Entity, &ChildOf), With<Hero>>,
     arenas: Query<&Arena>,
-) -> Result {
+) {
+    let here = current.0;
+    let in_here = |child: Entity| arenas.get(child).is_ok_and(|arena| arena.index() == here);
     // The roster, deterministic: the boss first, then minions by layer id.
     let mut roster: Vec<(Entity, bool, u32)> = possessables
         .iter()
-        .filter(|(_, child_of, ..)| {
-            arenas
-                .get(child_of.parent())
-                .is_ok_and(|arena| arena.index() == current.0)
-        })
+        .filter(|(_, child_of, ..)| in_here(child_of.parent()))
         .map(|(entity, _, is_boss, binding)| (entity, is_boss, binding.map_or(u32::MAX, |b| b.0.0)))
         .collect();
     roster.sort_by_key(|&(_, is_boss, id)| (!is_boss, id));
 
-    let (holder, is_boss, is_minion) = *selected;
-    let next = if is_boss || is_minion {
-        // Step through the roster; past the end → release back to puck 0.
-        roster
-            .iter()
-            .position(|&(entity, ..)| entity == holder)
+    let selected_info = selected
+        .as_deref()
+        .map(|&(entity, is_boss, is_minion)| (entity, is_boss || is_minion));
+    let possessed = matches!(selected_info, Some((_, true)));
+    let holder = selected_info.map(|(entity, _)| entity);
+
+    let next = if possessed {
+        // Step through the roster from the possessed entity; past the end → None.
+        holder
+            .and_then(|h| roster.iter().position(|&(entity, ..)| entity == h))
             .and_then(|at| roster.get(at.strict_add(1)))
             .map(|&(entity, ..)| entity)
     } else {
+        // Nothing or a hero selected → jump onto the first (the boss).
         roster.first().map(|&(entity, ..)| entity)
     };
+
     match next {
         Some(entity) => {
-            commands.entity(holder).remove::<Selected>();
+            if let Some(holder) = holder {
+                commands.entity(holder).remove::<Selected>();
+            }
             commands.entity(entity).insert(Selected);
         }
-        None if is_boss || is_minion => {
-            let Some((puck, _, child_of)) = pucks.iter().min_by_key(|(_, puck, _)| puck.0) else {
-                return Ok(());
-            };
-            commands.entity(holder).remove::<Selected>();
-            commands.entity(puck).insert(Selected);
-            current.0 = arenas.get(child_of.parent())?.index();
+        None if possessed => {
+            // Release to this arena's hero (remembered, else first), or nobody.
+            if let Some(holder) = holder {
+                commands.entity(holder).remove::<Selected>();
+            }
+            let hero = selection.0[here]
+                .filter(|&e| heroes.get(e).is_ok_and(|(_, c)| in_here(c.parent())))
+                .or_else(|| {
+                    heroes
+                        .iter()
+                        .find(|(_, c)| in_here(c.parent()))
+                        .map(|(e, _)| e)
+                });
+            if let Some(hero) = hero {
+                commands.entity(hero).insert(Selected);
+            }
         }
         None => {}
     }
-    Ok(())
 }
 
 /// `D` — cycle the authoring difficulty. `score_sync` notices the change and
@@ -658,40 +676,39 @@ pub(crate) fn push_minion_layer(
     id
 }
 
+/// Pushes an empty TILE layer on TOP of `stack` (the top layer wins overlapping
+/// cells), returning its id — shared by the `N` key and the entity browser via
+/// [`crate::layer_edit::LayerEditor`].
+pub(crate) fn push_tile_layer(stack: &mut ArenaStack) -> LayerId {
+    let ordinal = stack
+        .stack
+        .layers
+        .iter()
+        .filter(|layer| matches!(layer.kind, LayerKind::Tiles(_)))
+        .count()
+        .strict_add(1);
+    let id = stack.stack.next_id();
+    stack.stack.layers.push(Layer::new(
+        id,
+        format!("Tiles {ordinal}"),
+        LayerKind::Tiles(Vec::new()),
+    ));
+    id
+}
+
 /// `M` — drop a new MINION layer at the playhead: spawn tile near the arena
 /// centre, alive from the current tick to the cycle's end, empty staff. The
 /// preview re-folds (pre-spawning the hidden token); possess it with `B`,
 /// record with `R`, publish with `W`. The entity browser (`E`) supersedes
 /// this as the primary creation path.
-fn add_minion_layer(
-    mut commands: Commands,
-    current: Res<CurrentArena>,
-    mut arenas: Query<(Entity, &Arena, &ArenaClock, Option<&mut ArenaStack>)>,
-    mut refold: MessageWriter<crate::dope_sheet::RefoldPreview>,
-) {
-    let Some((arena_entity, arena, clock, arena_stack)) = arenas
-        .iter_mut()
-        .find(|(_, arena, ..)| arena.index() == current.0)
-    else {
-        return;
-    };
-    let created = arena_stack.is_none();
-    let mut fresh_stack;
-    let stack = match arena_stack {
-        Some(stack) => stack.into_inner(),
-        None => {
-            fresh_stack = ArenaStack::default();
-            &mut fresh_stack
-        }
-    };
-    push_minion_layer(stack, clock.tick, IVec2::new(30, 12));
-    info!("{}: new minion layer at tick {}", arena.name(), clock.tick);
-    if created {
-        commands.entity(arena_entity).insert(stack.clone());
+fn add_minion_layer(mut editor: LayerEditor, current: Res<CurrentArena>) {
+    if editor
+        .create_minion(current.0, IVec2::new(30, 12))
+        .is_some()
+        && let Some(arena) = Arena::from_index(current.0)
+    {
+        info!("{}: new minion layer", arena.name());
     }
-    refold.write(crate::dope_sheet::RefoldPreview {
-        arena: arena_entity,
-    });
 }
 
 /// Tab (tile mode) — cycle the paint-target among the stack's tile layers.
@@ -732,43 +749,15 @@ fn cycle_tile_layer(
 /// `N` (tile mode) — add a fresh tile layer on TOP of the stack (it wins
 /// conflicts) and select it for painting.
 fn new_tile_layer(
-    mut commands: Commands,
-    mut editor: ResMut<TileEditor>,
+    mut editor: LayerEditor,
+    mut tile_editor: ResMut<TileEditor>,
     current: Res<CurrentArena>,
-    mut arenas: Query<(Entity, &Arena, Option<&mut ArenaStack>)>,
 ) {
-    let Some((arena_entity, arena, arena_stack)) = arenas
-        .iter_mut()
-        .find(|(_, arena, _)| arena.index() == current.0)
-    else {
-        return;
-    };
-    let created = arena_stack.is_none();
-    let mut fresh_stack;
-    let stack = match arena_stack {
-        Some(stack) => stack.into_inner(),
-        None => {
-            fresh_stack = ArenaStack::default();
-            &mut fresh_stack
+    if let Some(id) = editor.create_tile_layer(current.0) {
+        tile_editor.selected_layer = Some(id);
+        if let Some(arena) = Arena::from_index(current.0) {
+            info!("{}: new tile layer", arena.name());
         }
-    };
-    let ordinal = stack
-        .stack
-        .layers
-        .iter()
-        .filter(|layer| matches!(layer.kind, LayerKind::Tiles(_)))
-        .count()
-        .strict_add(1);
-    let id = stack.stack.next_id();
-    stack.stack.layers.push(Layer::new(
-        id,
-        format!("Tiles {ordinal}"),
-        LayerKind::Tiles(Vec::new()),
-    ));
-    editor.selected_layer = Some(id);
-    info!("{}: new tile layer \"Tiles {ordinal}\"", arena.name());
-    if created {
-        commands.entity(arena_entity).insert(stack.clone());
     }
 }
 
@@ -901,6 +890,7 @@ pub(crate) struct AuthorPlugin;
 impl Plugin for AuthorPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
+            LayerEditPlugin,
             crate::dope_sheet::DopeSheetPlugin,
             crate::entity_browser::EntityBrowserPlugin,
             crate::popout::PopOutPlugin,

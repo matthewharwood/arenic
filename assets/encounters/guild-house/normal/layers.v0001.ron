@@ -1,0 +1,39 @@
+(
+    format: 2,
+    arena: 1,
+    difficulty: Normal,
+    layers: [
+        (
+            id: 0,
+            name: "Minion 1",
+            muted: false,
+            effects: [],
+            kind: Minion(
+                archetype: Token,
+                spawn_tick: 2923,
+                despawn_tick: 7200,
+                spawn_tile: (30, 12),
+                recording: (
+                    start: (30, 12),
+                    events: [],
+                ),
+            ),
+        ),
+        (
+            id: 1,
+            name: "Minion 2",
+            muted: false,
+            effects: [],
+            kind: Minion(
+                archetype: Token,
+                spawn_tick: 2997,
+                despawn_tick: 7200,
+                spawn_tile: (30, 12),
+                recording: (
+                    start: (30, 12),
+                    events: [],
+                ),
+            ),
+        ),
+    ],
+)

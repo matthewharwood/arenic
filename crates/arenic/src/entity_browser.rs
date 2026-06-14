@@ -23,17 +23,14 @@
 use arenic_game::arena::Arena;
 use arenic_game::default_font::MonoFont;
 use arenic_game::grid::{ARENA_H, ARENA_W, ARENAS, GRID_H, GRID_W, TILE};
-use arenic_game::layer::ArenaStack;
-use arenic_game::timeline::ArenaClock;
 use bevy::color::Alpha;
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
 
-use crate::author::push_minion_layer;
-use crate::dope_sheet::RefoldPreview;
 use crate::hud::TOP_BAR_PX;
 use crate::intro_scene::CurrentArena;
+use crate::layer_edit::LayerEditor;
 use crate::states::{AppState, BrowserFocus};
 
 const PANEL_W: f32 = 230.0;
@@ -382,8 +379,7 @@ fn browser_keys(
     mut panel: Single<&mut Node, With<BrowserPanel>>,
     mut header: Single<&mut Text, With<BrowserHeader>>,
     current: Res<CurrentArena>,
-    mut arenas: Query<(Entity, &Arena, &ArenaClock, Option<&mut ArenaStack>)>,
-    mut refold: MessageWriter<RefoldPreview>,
+    mut editor: LayerEditor,
 ) {
     // Esc: close the filter first, then the panel (layered, trees-style).
     if keys.just_pressed(KeyCode::Escape) {
@@ -457,14 +453,7 @@ fn browser_keys(
         if keys.just_pressed(KeyCode::Enter)
             && let RowKind::Entry { palette } = row.kind
         {
-            add_entry(
-                palette,
-                None,
-                &mut commands,
-                &current,
-                &mut arenas,
-                &mut refold,
-            );
+            add_entry(palette, None, current.0, &mut editor);
         }
     }
     // Type-to-filter: any letter/digit seeds or extends it; Backspace edits.
@@ -506,62 +495,19 @@ fn browser_keys(
 /// Adds the palette entry as a new layer on the focused arena: minions spawn
 /// at `tile` (or the arena centre) at the playhead tick; tile layers go on
 /// top of the stack.
-fn add_entry(
-    palette: usize,
-    tile: Option<IVec2>,
-    commands: &mut Commands,
-    current: &CurrentArena,
-    arenas: &mut Query<(Entity, &Arena, &ArenaClock, Option<&mut ArenaStack>)>,
-    refold: &mut MessageWriter<RefoldPreview>,
-) {
-    let Some((arena_entity, arena, clock, arena_stack)) = arenas
-        .iter_mut()
-        .find(|(_, arena, ..)| arena.index() == current.0)
-    else {
-        return;
-    };
-    let created = arena_stack.is_none();
-    let mut fresh_stack;
-    let stack = match arena_stack {
-        Some(stack) => stack.into_inner(),
-        None => {
-            fresh_stack = ArenaStack::default();
-            &mut fresh_stack
-        }
-    };
+fn add_entry(palette: usize, tile: Option<IVec2>, arena: usize, editor: &mut LayerEditor) {
+    let name = Arena::from_index(arena).map_or("?", |arena| arena.name());
     match PALETTE[palette].add {
         AddKind::MinionToken => {
             let tile = tile.unwrap_or(IVec2::new(30, 12));
-            push_minion_layer(stack, clock.tick, tile);
-            info!(
-                "{}: minion layer placed at {tile} (tick {})",
-                arena.name(),
-                clock.tick
-            );
+            editor.create_minion(arena, tile);
+            info!("{name}: minion layer placed at {tile}");
         }
         AddKind::TileLayer => {
-            let count = stack
-                .stack
-                .layers
-                .iter()
-                .filter(|layer| matches!(layer.kind, arenic_game::layer::LayerKind::Tiles(_)))
-                .count()
-                .strict_add(1);
-            let id = stack.stack.next_id();
-            stack.stack.layers.push(arenic_game::layer::Layer::new(
-                id,
-                format!("Tiles {count}"),
-                arenic_game::layer::LayerKind::Tiles(Vec::new()),
-            ));
-            info!("{}: tile layer added", arena.name());
+            editor.create_tile_layer(arena);
+            info!("{name}: tile layer added");
         }
     }
-    if created {
-        commands.entity(arena_entity).insert(stack.clone());
-    }
-    refold.write(RefoldPreview {
-        arena: arena_entity,
-    });
 }
 
 /// The character a key contributes to the filter (letters + digits — the
@@ -658,8 +604,7 @@ fn drop_on_board(
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     arena_roots: Query<(&Arena, &GlobalTransform)>,
     current: Res<CurrentArena>,
-    mut arenas: Query<(Entity, &Arena, &ArenaClock, Option<&mut ArenaStack>)>,
-    mut refold: MessageWriter<RefoldPreview>,
+    mut editor: LayerEditor,
 ) {
     if !buttons.just_released(MouseButton::Left) {
         return;
@@ -701,19 +646,13 @@ fn drop_on_board(
     })();
     match placed {
         Some((arena_index, tile)) => {
-            // Placement targets the arena under the cursor: refocus it first.
+            // Placement targets the arena under the cursor: refocus it + add
+            // straight onto it (the editor takes the arena explicitly, so the
+            // deferred CurrentArena swap doesn't matter).
             if arena_index != current.0 {
                 commands.insert_resource(CurrentArena(arena_index));
             }
-            let current = CurrentArena(arena_index);
-            add_entry(
-                palette,
-                Some(tile),
-                &mut commands,
-                &current,
-                &mut arenas,
-                &mut refold,
-            );
+            add_entry(palette, Some(tile), arena_index, &mut editor);
         }
         None => {
             state.shake = 0.25;

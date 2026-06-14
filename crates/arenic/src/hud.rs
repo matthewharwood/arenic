@@ -127,17 +127,6 @@ fn setup_hud(mut commands: Commands, focus: Res<Focus>, mono: Res<MonoFont>) {
         flex_shrink: 0.0,
         ..default()
     };
-    let action = |label: &str| {
-        (
-            Node {
-                padding: UiRect::axes(Val::Px(14.0), Val::Px(7.0)),
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            bg(|x| x.surface_3()),
-            children![txt(label, 14.0, |x| x.text_1())],
-        )
-    };
 
     commands.spawn((
         DespawnOnExit(AppState::Intro),
@@ -164,7 +153,7 @@ fn setup_hud(mut commands: Commands, focus: Res<Focus>, mono: Res<MonoFont>) {
                 children![
                     (txt(focus.title(), 16.0, |x| x.text_1()), HudTitle),
                     mono_txt(
-                        "P zoom   [ ] arena   \u{2190}\u{2191}\u{2193}\u{2192} move   1 Nova   L lava   Esc title",
+                        "P zoom   [ ] arena   \u{2190}\u{2191}\u{2193}\u{2192} move   1 Holy   L lava   Esc title",
                         12.0,
                         |x| x.text_muted(),
                     ),
@@ -184,25 +173,17 @@ fn setup_hud(mut commands: Commands, focus: Res<Focus>, mono: Res<MonoFont>) {
                     (strip(), bg(|x| x.surface_2())),
                 ],
             ),
-            // --- Bottom bar (95px): action buttons ---
+            // --- Bottom bar (95px): a themed strip masking the arena's lower
+            // edge; the Hotbar (`crate::hotbar`) — ability slots + record
+            // control — floats over it. ---
             (
                 Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(BOTTOM_BAR_PX),
                     flex_shrink: 0.0,
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    column_gap: Val::Px(12.0),
                     ..default()
                 },
                 bg(|x| x.surface_2()),
-                children![
-                    action("Rotate"),
-                    action("Roster"),
-                    action("Loot"),
-                    action("Auction"),
-                    action("Craft"),
-                ],
             ),
         ],
     ));

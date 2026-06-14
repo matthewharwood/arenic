@@ -5,7 +5,8 @@ use arenic_game::ui::menu_button;
 
 use crate::states::AppState;
 
-/// The title screen: "Arenic" centered above a "Start" button (-> Intro).
+/// The title screen: "Arenic" centered above the "Start" (-> Intro) and
+/// "Settings" (-> Settings) buttons.
 pub struct TitleScreenPlugin;
 
 impl Plugin for TitleScreenPlugin {
@@ -55,5 +56,12 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, theme: Res<Acti
         },
     );
 
-    commands.entity(root).add_child(start);
+    let settings = menu_button(&mut commands, &palette, "Settings", 28.0);
+    commands.entity(settings).observe(
+        |_: On<Pointer<Click>>, mut next: ResMut<NextState<AppState>>| {
+            next.set(AppState::Settings);
+        },
+    );
+
+    commands.entity(root).add_children(&[start, settings]);
 }

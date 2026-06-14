@@ -5,6 +5,7 @@ lives in `crates/arenic_game/src/audio/mod.rs` (`arena_track` + `THEME_PATH`) �
 **wiring a new arena's track is: drop the file here, fill in its table line.**
 
 - `arenic_theme.mp3` — the title screen.
+- `guildmaster_guildhouse.mp3` — Guildmaster / Guild House (zoomed in).
 - `warrior_bastion.mp3` — Warrior / Bastion (zoomed in).
 - `merchant_casino.mp3` — Merchant / Casino (zoomed in).
 - The **overworld** plays no file: its soundtrack is the procedural oscillator

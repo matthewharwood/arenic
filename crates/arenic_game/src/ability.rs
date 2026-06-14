@@ -28,6 +28,14 @@ pub enum AbilityId {
 }
 
 impl AbilityId {
+    /// The short display name shown on the hotbar — one word so a slot's label
+    /// never wraps. (The VFX is a "Holy Nova"; on the bar it reads just "Holy".)
+    pub fn name(self) -> &'static str {
+        match self {
+            AbilityId::HolyNova => "Holy",
+        }
+    }
+
     /// How this ability SOUNDS across distance ([`SfxProfile`]): its base
     /// volume, and `reach` — how far it carries past the spatial falloff knee.
     /// This is where "different tones behave differently" lives; give a new

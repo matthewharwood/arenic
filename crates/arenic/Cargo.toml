@@ -6,6 +6,8 @@ edition.workspace = true
 [dependencies]
 bevy.workspace = true
 arenic_game.workspace = true
+serde.workspace = true
+ron.workspace = true
 
 [features]
 # In-game authoring tools (`just author`): possess + record bosses, the tile

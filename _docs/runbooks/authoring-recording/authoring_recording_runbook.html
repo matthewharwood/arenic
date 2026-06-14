@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Arenic Authoring and Recording Runbook</title>
+  <style>
+    @page { size: Letter; margin: 0.55in; }
+    :root {
+      --ink: #171719;
+      --muted: #5e5b66;
+      --rule: #d9d3c6;
+      --panel: #f6f1e8;
+      --accent: #9f6a13;
+      --dark: #19161d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.35;
+      background: white;
+    }
+    h1, h2, h3 { break-after: avoid; line-height: 1.1; margin: 0; }
+    h1 { font-size: 25pt; letter-spacing: 0; }
+    h2 { font-size: 16pt; margin-top: 22pt; padding-top: 4pt; border-top: 1px solid var(--rule); }
+    h3 { font-size: 11.5pt; margin-top: 13pt; color: var(--accent); }
+    p { margin: 6pt 0; }
+    ul, ol { margin: 6pt 0 8pt 18pt; padding: 0; }
+    li { margin: 2pt 0; }
+    code, .key {
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 9.5pt;
+      background: #eee9de;
+      border: 1px solid #ddd4c5;
+      border-radius: 3px;
+      padding: 0 3px;
+      white-space: nowrap;
+    }
+    .cover {
+      min-height: 9.1in;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .dek { font-size: 13pt; color: var(--muted); max-width: 6.8in; margin-top: 10pt; }
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8pt;
+      margin: 18pt 0;
+    }
+    .meta div, .callout {
+      background: var(--panel);
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      padding: 9pt;
+    }
+    .label {
+      display: block;
+      color: var(--muted);
+      text-transform: uppercase;
+      font-size: 7.5pt;
+      letter-spacing: 0.06em;
+      margin-bottom: 3pt;
+    }
+    .hero {
+      width: 100%;
+      border: 1px solid var(--rule);
+      border-radius: 7px;
+      margin-top: 8pt;
+    }
+    figure {
+      margin: 10pt 0 12pt;
+      break-inside: avoid;
+    }
+    figure img {
+      width: 100%;
+      display: block;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+    }
+    figcaption {
+      color: var(--muted);
+      font-size: 8.5pt;
+      margin-top: 4pt;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 7pt 0 10pt;
+      break-inside: avoid;
+    }
+    th, td {
+      border: 1px solid var(--rule);
+      vertical-align: top;
+      padding: 5pt 6pt;
+    }
+    th {
+      background: var(--dark);
+      color: white;
+      text-align: left;
+      font-size: 8.8pt;
+    }
+    td:first-child { width: 1.65in; }
+    .page-break { break-before: page; }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12pt;
+    }
+    .checklist li { margin-bottom: 4pt; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div>
+      <h1>Arenic Authoring and Recording Runbook</h1>
+      <p class="dek">A practical onboarding guide for designers building Normal, Heroic, and Mythic boss encounters with the native authoring tool.</p>
+      <div class="meta">
+        <div><span class="label">Audience</span>Encounter designers and content authors</div>
+        <div><span class="label">Tool</span>Native author build: <code>just author</code></div>
+        <div><span class="label">Output</span>Versioned encounter stacks in <code>assets/encounters</code></div>
+      </div>
+      <div class="callout">
+        <strong>Current ability caveat.</strong> Not all boss and hero abilities exist yet. Today, boss slots can record, but the live loadout is still placeholder-heavy: slot 1 resolves to Holy Nova and slots 2-4 may be inert until their abilities land. Build the timing, movement, tile pressure, and layer structure now; swap in final abilities later.
+      </div>
+    </div>
+    <figure>
+      <img src="screenshots/01-title-screen.png" alt="Arenic title screen">
+      <figcaption>Start from the native app. The web build does not include author mode.</figcaption>
+    </figure>
+  </section>
+
+  <section class="page-break">
+    <h2>1. Mental Model</h2>
+    <p>Author mode is a native-only build that layers encounter content on top of the normal game simulation. Each arena and difficulty owns a draft layer stack. Playback folds that stack into the normal two-minute, 60 Hz timeline.</p>
+    <ul>
+      <li><strong>Cycle length:</strong> 120 seconds, 7,200 ticks. Every movement, ability, tile keyframe, and effect key lands on an integer tick.</li>
+      <li><strong>Difficulty ownership:</strong> Normal, Heroic, and Mythic are separate authoring targets. Use <span class="key">D</span> to cycle between them.</li>
+      <li><strong>Draft vs published:</strong> edits stay in memory until <span class="key">W</span> publishes the focused arena's stack.</li>
+      <li><strong>Layer conflict rule:</strong> top tile layer wins when two layers claim the same cell at the same tick.</li>
+      <li><strong>Rollback:</strong> delete the newest <code>layers.vNNNN.ron</code> file, then restart/reload. Git history is the second level of undo.</li>
+    </ul>
+    <figure>
+      <img src="screenshots/02-overworld-author-mode.png" alt="Author mode overview with author HUD and dope sheet">
+      <figcaption>The author chip shows difficulty, arena slug, stack state, layer count, and dirty state.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>2. Launch and Pick the Assignment</h2>
+    <ol>
+      <li>Run <code>just author</code>. Do not use the web app for authoring; author systems are excluded from WASM builds.</li>
+      <li>Use <span class="key">[</span> / <span class="key">]</span> to focus the arena you are building.</li>
+      <li>Use <span class="key">D</span> to choose Normal, Heroic, or Mythic. If the tool warns about dirty edits, publish with <span class="key">W</span> or quit/reopen to discard the in-memory draft.</li>
+      <li>Use <span class="key">P</span> to zoom into the focused arena for detailed placement.</li>
+    </ol>
+    <div class="two-col">
+      <figure>
+        <img src="screenshots/03-heroic-difficulty.png" alt="Heroic difficulty selected in author HUD">
+        <figcaption>Heroic target selected.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/04-mythic-difficulty.png" alt="Mythic difficulty selected in author HUD">
+        <figcaption>Mythic target selected.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="page-break">
+    <h2>3. Global Hotkeys</h2>
+    <table>
+      <thead><tr><th>Input</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><span class="key">P</span></td><td>Toggle overworld and single-arena zoom.</td></tr>
+        <tr><td><span class="key">[</span> / <span class="key">]</span></td><td>Cycle focused arena. In zoomed view, the camera follows.</td></tr>
+        <tr><td><span class="key">D</span></td><td>Cycle authoring difficulty: Normal -> Heroic -> Mythic.</td></tr>
+        <tr><td><span class="key">B</span></td><td>Possess the focused arena's boss, then each minion layer, then return to puck control.</td></tr>
+        <tr><td><span class="key">M</span></td><td>Add a token minion layer at the playhead. The entity browser is preferred for deliberate placement.</td></tr>
+        <tr><td><span class="key">E</span></td><td>Open the entity browser.</td></tr>
+        <tr><td><span class="key">T</span></td><td>Toggle tile editor mode.</td></tr>
+        <tr><td><span class="key">W</span></td><td>Publish the focused arena's entire draft stack as the next <code>layers.vNNNN.ron</code>.</td></tr>
+        <tr><td><span class="key">F5</span></td><td>Restart the focused arena at tick 0 for a fresh watch-through.</td></tr>
+        <tr><td><span class="key">F1</span> or <span class="key">?</span></td><td>Toggle the in-app dope sheet binding overlay.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>World and Recording Basics</h3>
+    <table>
+      <thead><tr><th>Input</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><span class="key">Arrow keys</span></td><td>Move the selected puck, boss, or minion one tile per press. During tile mode, arrows move the tile cursor instead.</td></tr>
+        <tr><td><span class="key">1-4</span></td><td>Cast the selected entity's ability slot. For possessed bosses, slots resolve through the boss phase loadout.</td></tr>
+        <tr><td><span class="key">R</span></td><td>Start a recording countdown, stop a recording early, or open the relevant recording modal.</td></tr>
+        <tr><td><span class="key">Tab</span></td><td>Switch selected hero in normal world control. During tile mode, cycle tile layers.</td></tr>
+        <tr><td><span class="key">Esc</span></td><td>Cancel modal / return to title when idle.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>4. Record Boss and Minion Timelines</h2>
+    <ol>
+      <li>Focus a combat arena with <span class="key">[</span> / <span class="key">]</span>, then zoom with <span class="key">P</span>.</li>
+      <li>Press <span class="key">B</span> until the boss or target minion is selected.</li>
+      <li>Rehearse movement with arrows and slot casts with <span class="key">1-4</span>. Hold an arrow while pressing a slot to record an aim direction for abilities that use it later.</li>
+      <li>Press <span class="key">R</span> to start the three-second countdown. Capture runs from 0:00 across the two-minute cycle.</li>
+      <li>Press <span class="key">R</span> again to stop early, then choose <strong>Commit</strong>, <strong>Keep recording</strong>, or <strong>Discard</strong>.</li>
+      <li>Only publish with <span class="key">W</span> when the take should become the next versioned encounter file.</li>
+    </ol>
+    <figure>
+      <img src="screenshots/05-boss-possession.png" alt="Sanctum arena with boss selected">
+      <figcaption>Possess a boss or minion before recording. Bosses and minions use the same record/replay flow as heroes.</figcaption>
+    </figure>
+    <div class="two-col">
+      <figure>
+        <img src="screenshots/10-recording-active.png" alt="Recording active indicator">
+        <figcaption>REC means the current staff is capturing input intent.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/11-recording-stop-modal.png" alt="Recording commit discard modal">
+        <figcaption>Use number keys to resolve recording modals quickly.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="page-break">
+    <h2>5. Build Tile Choreography</h2>
+    <p>Tile authoring is for floor hazards, safe windows, waves, and phase pressure. The editor writes tile keyframes into the selected tile layer of the draft stack.</p>
+    <table>
+      <thead><tr><th>Input</th><th>Tile editor behavior</th></tr></thead>
+      <tbody>
+        <tr><td><span class="key">T</span></td><td>Open/close tile mode. The focused arena pauses while editing.</td></tr>
+        <tr><td><span class="key">Arrow keys</span></td><td>Move the tile cursor one cell.</td></tr>
+        <tr><td><span class="key">,</span> / <span class="key">.</span></td><td>Scrub playhead back/forward one second. Hold Shift for ten seconds.</td></tr>
+        <tr><td><span class="key">I</span> / <span class="key">O</span></td><td>Set in/out marks for the keyframe range.</td></tr>
+        <tr><td><span class="key">Space</span></td><td>Toggle a Lava keyframe for the cursor cell over the marked range.</td></tr>
+        <tr><td><span class="key">N</span></td><td>Add a new tile layer on top of the stack and select it.</td></tr>
+        <tr><td><span class="key">Tab</span></td><td>Cycle the paint target through existing tile layers.</td></tr>
+      </tbody>
+    </table>
+    <div class="two-col">
+      <figure>
+        <img src="screenshots/08-tile-editor-open.png" alt="Tile editor HUD state">
+        <figcaption>Tile mode exposes cursor cell, mark range, and target layer in the author chip.</figcaption>
+      </figure>
+      <figure>
+        <img src="screenshots/09-tile-paint-keyframe.png" alt="Tile keyframe added to draft stack">
+        <figcaption>After painting, the stack becomes dirty until published.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Use Layers, Browser, and Dope Sheet</h2>
+    <h3>Entity Browser</h3>
+    <table>
+      <thead><tr><th>Input</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td><span class="key">E</span></td><td>Open/focus the browser.</td></tr>
+        <tr><td><span class="key">Up</span> / <span class="key">Down</span></td><td>Move focused row.</td></tr>
+        <tr><td><span class="key">Right</span> / <span class="key">Left</span></td><td>Expand/collapse directories or jump to parent.</td></tr>
+        <tr><td><span class="key">Type</span></td><td>Filter by path substring. Backspace edits the filter.</td></tr>
+        <tr><td><span class="key">Enter</span></td><td>Add focused palette entry at the playhead.</td></tr>
+        <tr><td><span class="key">Esc</span></td><td>Close filter first, then browser.</td></tr>
+      </tbody>
+    </table>
+    <figure>
+      <img src="screenshots/07-entity-browser.png" alt="Entity browser open">
+      <figcaption>The browser currently exposes Token Minion and Tile Layer entries. More archetypes can be added as palette data grows.</figcaption>
+    </figure>
+
+    <h3>Dope Sheet and Effects</h3>
+    <p>The dope sheet edits effect tracks on layers. It is also the fastest way to inspect row focus, playhead position, and the current key-editing bindings.</p>
+    <table>
+      <thead><tr><th>Input</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td>Click row / pill</td><td>Focus layer row or select an effect key. Shift-click adds to selection.</td></tr>
+        <tr><td><span class="key">Ctrl+K</span></td><td>Select keys at the playhead column.</td></tr>
+        <tr><td><span class="key">Ctrl+A</span> / <span class="key">Alt+A</span></td><td>Select all / clear selection.</td></tr>
+        <tr><td><span class="key">I</span> / <span class="key">Shift+I</span></td><td>Insert Scale / Opacity effect key at the playhead.</td></tr>
+        <tr><td><span class="key">G</span></td><td>Move selected keys. Digits enter a numeric tick delta; Enter commits; Esc cancels.</td></tr>
+        <tr><td><span class="key">Alt+Left/Right</span></td><td>Nudge selected keys by one tick; add Shift for 15 ticks.</td></tr>
+        <tr><td><span class="key">Shift+D</span></td><td>Duplicate selected keys into move mode.</td></tr>
+        <tr><td><span class="key">X</span> / <span class="key">Delete</span></td><td>Delete selected keys.</td></tr>
+        <tr><td><span class="key">Shift+W</span></td><td>Ripple keys at or after the playhead.</td></tr>
+        <tr><td><span class="key">F9</span> family / <span class="key">H</span> / <span class="key">T</span></td><td>Set ease-in-out, hold, or cycle the selected key's ease.</td></tr>
+        <tr><td><span class="key">J</span> / <span class="key">K</span></td><td>Jump playhead to previous/next key.</td></tr>
+        <tr><td>Wheel / <span class="key">Ctrl+Wheel</span></td><td>Pan / zoom the timeline.</td></tr>
+        <tr><td><span class="key">=</span>, <span class="key">-</span>, <span class="key">\</span>, <span class="key">A</span>, <span class="key">`</span></td><td>Zoom in/out, toggle full cycle, frame all, collapse panel.</td></tr>
+      </tbody>
+    </table>
+    <figure>
+      <img src="screenshots/06-dope-sheet-help-overlay.png" alt="Dope sheet help overlay">
+      <figcaption>Use <span class="key">F1</span> in-app for the live binding overlay. Some design-doc target interactions are intentionally deferred; this overlay reflects the implemented surface.</figcaption>
+    </figure>
+  </section>
+
+  <section class="page-break">
+    <h2>7. Designer Assignment: Build Three Difficulties</h2>
+    <p>Each assigned boss should receive a Normal, Heroic, and Mythic pass. Because final abilities are incomplete, focus on readable timing, repeatable movement, tile pressure, and layer structure.</p>
+    <h3>Normal</h3>
+    <ul class="checklist">
+      <li>Create a readable two-minute boss movement loop with clear safe windows.</li>
+      <li>Use slot 1 where you need a placeholder cast. Do not depend on missing slots 2-4 for shipped difficulty.</li>
+      <li>Add at least one simple tile hazard or phase marker if it teaches the encounter pattern.</li>
+      <li>Publish only after watching a full clean cycle with <span class="key">F5</span>.</li>
+    </ul>
+    <h3>Heroic</h3>
+    <ul class="checklist">
+      <li>Start from the Normal mental model, then add one additional pressure layer: tighter movement, a tile layer, or a minion layer.</li>
+      <li>Keep readability: designers and players should still be able to explain why a failure happened.</li>
+      <li>Use the same two-minute phase boundaries so later ability swaps remain aligned.</li>
+    </ul>
+    <h3>Mythic</h3>
+    <ul class="checklist">
+      <li>Increase density through layering, not random input spam. The score should still be deterministic and inspectable.</li>
+      <li>Use separate tile layers for different concepts so top-layer conflict wins are intentional.</li>
+      <li>If adding minions, record each staff separately and verify the folded result from tick 0.</li>
+    </ul>
+    <h3>Done Criteria for Each Difficulty</h3>
+    <ul class="checklist">
+      <li>The author chip has no dirty draft after publish.</li>
+      <li>The latest file exists under <code>assets/encounters/&lt;arena&gt;/&lt;difficulty&gt;/layers.vNNNN.ron</code>.</li>
+      <li>A full <span class="key">F5</span> watch-through starts correctly from tick 0.</li>
+      <li>Any placeholder ability expectations are noted in the encounter handoff.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>8. Troubleshooting</h2>
+    <table>
+      <thead><tr><th>Symptom</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td>Author HUD missing</td><td>Use <code>just author</code>. The web app and normal game build intentionally exclude author mode.</td></tr>
+        <tr><td><span class="key">D</span> will not switch difficulty</td><td>You have dirty draft edits. Publish with <span class="key">W</span> or quit/reopen if the draft should be discarded.</td></tr>
+        <tr><td>Published the wrong take</td><td>Delete the newest <code>layers.vNNNN.ron</code> in that arena/difficulty directory, then restart/reload. Do not hand-edit another difficulty's folder.</td></tr>
+        <tr><td>Ability slot does nothing</td><td>Expected for unfinished abilities. Record the timing anyway only if the future slot needs that timestamp.</td></tr>
+        <tr><td>Modal blocking inputs</td><td>Use <span class="key">1-9</span>, focus arrows/Tab, Enter/Space, or Esc. World input is gated while modals are open.</td></tr>
+        <tr><td>Tile layer conflicts look wrong</td><td>Remember top layer wins. Put overrides above broad base patterns.</td></tr>
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>

@@ -1,6 +1,9 @@
 # Rust build output
 /target
 
+# User-local display settings (written at runtime by the Settings screen)
+/settings.ron
+
 # mdbook build output
 /book
 

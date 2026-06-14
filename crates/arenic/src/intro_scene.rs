@@ -58,6 +58,11 @@ use crate::states::{AppState, not_tile_editing};
 const GUILD_HOUSE: usize = 1;
 /// Arena 4 (centre of the 3×3 grid) — the overworld zoom-out re-centres here.
 const OVERWORLD: usize = 4;
+/// Arena 8 (bottom-right) is deliberately left WITHOUT a hero, so the
+/// no-selection state (empty hotbar, no ring) can be exercised by paging to it.
+const EMPTY_ARENA: usize = 8;
+/// Where a combat arena's lone hero stands (left of the boss at col 33).
+const HERO_TILE: (i32, i32) = (15, 15);
 /// The tile every combat boss rests on until a score moves it — the cell
 /// nearest the arena centre.
 const BOSS_COL: i32 = 33;
@@ -93,21 +98,31 @@ pub(crate) struct CurrentArena(pub(crate) usize);
 #[component(immutable)]
 pub(crate) struct ZoomOut;
 
-/// A guildmaster puck's index in the Guild House — `Tab` cycles selection by it.
-/// `pub(crate)` so the author feature can hand `Selected` back to puck 0 when a
-/// boss is released.
+/// A selectable, controllable hero (the guildmaster disc). `Tab` cycles between
+/// the heroes that share an arena; focus-following ([`select_on_focus`]) picks
+/// one when you enter the arena. `pub(crate)` so the author feature can hand
+/// `Selected` back to a hero when a boss is released.
 #[derive(Component)]
 #[component(immutable)]
-pub(crate) struct Puck(pub(crate) usize);
+pub(crate) struct Hero;
 
-/// Marks the currently-selected puck: it moves with the arrows, casts abilities, and
-/// wears the selection ring. Exactly one puck has this at a time — recording
-/// systems query it dynamically (RULEBOOK → Selected Character Query Pattern).
+/// Per-arena last-selected hero, indexed by arena. Entering an arena re-selects
+/// the hero you last controlled there (or its only hero, or nothing if it has
+/// none) — see [`select_on_focus`]. `pub(crate)` for the author release path.
+#[derive(Resource, Default)]
+pub(crate) struct ArenaSelection(pub(crate) [Option<Entity>; ARENAS]);
+
+/// Marks the currently-selected character (a [`Hero`], or — in author mode — a
+/// possessed boss/minion): it moves with the arrows, casts abilities, and wears
+/// the selection ring. At most ONE entity has this at a time; nothing has it in
+/// an empty arena. Recording systems query it dynamically (RULEBOOK → Selected
+/// Character Query Pattern).
 #[derive(Component)]
 #[component(immutable)]
 pub(crate) struct Selected;
 
-/// The glowing selection halo; [`follow_selected`] parks it on the selected puck.
+/// The glowing selection halo; [`follow_selected`] parks it on the selected
+/// character, or hides it when nothing is selected.
 #[derive(Component)]
 #[component(immutable)]
 struct SelectionRing;
@@ -131,7 +146,15 @@ impl Plugin for IntroScenePlugin {
         app.add_plugins(AtmospherePlugin)
             .add_plugins(AbilityPlugin)
             .insert_resource(CurrentArena(GUILD_HOUSE))
+            .init_resource::<ArenaSelection>()
             .add_systems(OnEnter(AppState::Intro), setup_intro)
+            // Focus-follows-selection: after the Update writes that moved focus
+            // flush, re-select the focused arena's hero (PostUpdate).
+            .add_systems(
+                PostUpdate,
+                select_on_focus
+                    .run_if(resource_changed::<CurrentArena>.and(in_state(AppState::Intro))),
+            )
             .add_systems(
                 Update,
                 (
@@ -215,8 +238,11 @@ fn setup_intro(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut clouds: ResMut<Assets<CloudFog>>,
+    mut selection: ResMut<ArenaSelection>,
 ) {
     let center = board_center();
+    // Fresh memory each entry — a prior visit's hero entities are despawned.
+    selection.0 = [None; ARENAS];
 
     // --- Camera: start framing the whole overworld (zoomed out, centred on arena 4) ---
     commands.spawn((
@@ -383,27 +409,28 @@ fn setup_intro(
             &theme,
         );
 
-        // The Guild House holds TWO guildmaster pucks (children of the arena, so they
-        // move in local tile space, §4.1). `Tab` selects between them; the first starts
-        // selected. A glowing ring (below) marks the selection.
-        if index == GUILD_HOUSE {
-            for (i, (col, row)) in [(30, 15), (36, 15)].into_iter().enumerate() {
-                let p = tile_to_world(col, row);
-                let mut puck = commands.spawn((
-                    guildmaster(&assets),
-                    Puck(i),
-                    TileMover::new(col, row),
-                    RecordingLibrary::default(),
-                    Transform::from_xyz(p.x, p.y, 0.05)
-                        .with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
-                    ChildOf(arena),
-                ));
-                if i == 0 {
-                    puck.insert(Selected);
-                }
+        // Heroes (children of the arena, so they move in local tile space, §4.1):
+        // one per arena — TWO in the Guild House so `Tab` has something to cycle
+        // and the per-arena memory has two to choose between — except
+        // [`EMPTY_ARENA`], left bare to exercise the no-selection state.
+        let hero_tiles: &[(i32, i32)] = match index {
+            GUILD_HOUSE => &[(30, 15), (36, 15)],
+            EMPTY_ARENA => &[],
+            _ => &[HERO_TILE],
+        };
+        for (i, &(col, row)) in hero_tiles.iter().enumerate() {
+            let hero = spawn_hero(&mut commands, &assets, arena, col, row);
+            // The initially-focused arena's first hero starts selected (and is
+            // its remembered choice); other arenas fill in on first focus.
+            if index == GUILD_HOUSE && i == 0 {
+                commands.entity(hero).insert(Selected);
+                selection.0[GUILD_HOUSE] = Some(hero);
             }
-            // The selection halo — a glowing ring `follow_selected` parks on the
-            // selected puck each frame (starts on puck 0).
+        }
+        // The selection halo — one ring, spawned on the Guild House and parked on
+        // the selected hero each frame by [`follow_selected`] (hidden when
+        // nothing is selected). It re-parents itself as the selection moves.
+        if index == GUILD_HOUSE {
             let start = tile_to_world(30, 15);
             commands.spawn((
                 SelectionRing,
@@ -424,6 +451,29 @@ fn setup_intro(
     // Hand the materials + lookup to the world so `TileBoard` can flip tile states.
     commands.insert_resource(tile_materials);
     commands.insert_resource(tile_lookup);
+}
+
+/// Spawns one selectable hero (the guildmaster disc, rotated to face the
+/// top-down camera) at `(col, row)` in `arena`, and returns it. Carries a
+/// [`TileMover`] + a [`RecordingLibrary`] so it can walk and cut a staff.
+fn spawn_hero(
+    commands: &mut Commands,
+    assets: &AssetServer,
+    arena: Entity,
+    col: i32,
+    row: i32,
+) -> Entity {
+    let p = tile_to_world(col, row);
+    commands
+        .spawn((
+            guildmaster(assets),
+            Hero,
+            TileMover::new(col, row),
+            RecordingLibrary::default(),
+            Transform::from_xyz(p.x, p.y, 0.05).with_rotation(Quat::from_rotation_x(FRAC_PI_2)),
+            ChildOf(arena),
+        ))
+        .id()
 }
 
 /// Spawns an arena's sky-swarm — `count` motes in a low ring under the floor, all
@@ -596,49 +646,131 @@ fn kindle(
     Ok(())
 }
 
-/// `Tab` moves the selection to the next guildmaster puck (cyclic, by [`Puck`]
-/// index). Focus follows selection: [`CurrentArena`] jumps to the new puck's
-/// arena (the zoomed-in camera + HUD re-theme), and the ring catches up via
-/// [`follow_selected`] — the same mechanism an edge-walk uses.
+/// `Tab` cycles the selection among the heroes that share the FOCUSED arena
+/// (stable order), remembering the pick so [`select_on_focus`] restores it next
+/// time you return. A no-op with fewer than two heroes here, or while a boss /
+/// minion is possessed (author mode) — that selection isn't hero-cycling.
 fn cycle_selection(
     mut commands: Commands,
-    selected: Single<(Entity, &Puck), With<Selected>>,
-    pucks: Query<(Entity, &Puck, &ChildOf)>,
+    current: Res<CurrentArena>,
+    mut memory: ResMut<ArenaSelection>,
+    selected: Option<Single<(Entity, Has<Hero>), With<Selected>>>,
+    heroes: Query<(Entity, &ChildOf), With<Hero>>,
     arenas: Query<&Arena>,
-    mut current: ResMut<CurrentArena>,
-) -> Result {
-    let (current_puck, here) = *selected;
-    let count = pucks.iter().count();
-    debug_assert!(count > 0, "invariant: the Selected puck is in `pucks`");
-    let next = here.0.strict_add(1) % count;
-    if let Some((entity, _, child_of)) = pucks.iter().find(|(_, p, _)| p.0 == next) {
-        commands.entity(current_puck).remove::<Selected>();
-        commands.entity(entity).insert(Selected);
-        current.0 = arenas.get(child_of.parent())?.index();
+) {
+    let selected_info = selected
+        .as_deref()
+        .map(|&(entity, is_hero)| (entity, is_hero));
+    if matches!(selected_info, Some((_, false))) {
+        return; // a possessed non-hero is selected — leave it be.
     }
-    Ok(())
+    let here = current.0;
+    let mut arena_heroes: Vec<Entity> = heroes
+        .iter()
+        .filter(|(_, child_of)| {
+            arenas
+                .get(child_of.parent())
+                .is_ok_and(|a| a.index() == here)
+        })
+        .map(|(entity, _)| entity)
+        .collect();
+    if arena_heroes.len() < 2 {
+        return;
+    }
+    arena_heroes.sort();
+    let current_entity = selected_info.map(|(entity, _)| entity);
+    let next = match current_entity.and_then(|e| arena_heroes.iter().position(|&h| h == e)) {
+        Some(at) => arena_heroes[at.strict_add(1) % arena_heroes.len()],
+        None => arena_heroes[0],
+    };
+    if Some(next) != current_entity {
+        if let Some(entity) = current_entity {
+            commands.entity(entity).remove::<Selected>();
+        }
+        commands.entity(next).insert(Selected);
+        memory.0[here] = Some(next);
+    }
 }
 
-/// Parks the selection ring on the selected puck (its local X/Y), so the halo
-/// tracks `Tab`, arrow-key movement, AND arena changes: if the puck lives in a
-/// different arena than the ring (Tab across arenas, or an edge-walk), the ring
-/// re-parents first so the local copy lands in the right space. The ring keeps
-/// its own Z.
+/// When focus moves to another arena, hand control to that arena's hero — the
+/// one you last had there, else its first, else nobody (an empty arena leaves
+/// the [`Selected`] off entirely). Runs in `PostUpdate` so the Update-frame
+/// writes that moved focus are all flushed first: a hero already standing in the
+/// focused arena (an edge-walk landed it there) is KEPT, and a possessed
+/// boss/minion — a non-[`Hero`] `Selected` — is left untouched.
+fn select_on_focus(
+    current: Res<CurrentArena>,
+    mut memory: ResMut<ArenaSelection>,
+    selected: Option<Single<(Entity, &ChildOf, Has<Hero>), With<Selected>>>,
+    heroes: Query<(Entity, &ChildOf), With<Hero>>,
+    arenas: Query<&Arena>,
+    mut commands: Commands,
+) {
+    let here = current.0;
+    let arena_heroes: Vec<Entity> = heroes
+        .iter()
+        .filter(|(_, child_of)| {
+            arenas
+                .get(child_of.parent())
+                .is_ok_and(|a| a.index() == here)
+        })
+        .map(|(entity, _)| entity)
+        .collect();
+
+    let selected_info = selected
+        .as_deref()
+        .map(|&(entity, _, is_hero)| (entity, is_hero));
+    if let Some((entity, is_hero)) = selected_info {
+        if !is_hero {
+            return; // possessed boss/minion — never disturbed by focus.
+        }
+        if arena_heroes.contains(&entity) {
+            memory.0[here] = Some(entity); // already standing here — keep it.
+            return;
+        }
+    }
+
+    let pick = memory.0[here]
+        .filter(|entity| arena_heroes.contains(entity))
+        .or_else(|| arena_heroes.first().copied());
+    if let Some((entity, _)) = selected_info {
+        commands.entity(entity).remove::<Selected>();
+    }
+    if let Some(hero) = pick {
+        commands.entity(hero).insert(Selected);
+        memory.0[here] = Some(hero);
+    }
+}
+
+/// Parks the selection ring on the selected character (its local X/Y), so the
+/// halo tracks `Tab`, arrow-key movement, AND arena changes: if the hero lives
+/// in a different arena than the ring (focus change, or an edge-walk), the ring
+/// re-parents first so the local copy lands in the right space. With nothing
+/// selected (an empty arena) the halo simply hides. The ring keeps its own Z.
 fn follow_selected(
     mut commands: Commands,
-    puck: Single<(&Transform, &ChildOf), (With<Selected>, Without<SelectionRing>)>,
-    ring: Single<(Entity, &mut Transform, &ChildOf), With<SelectionRing>>,
+    selected: Option<Single<(&Transform, &ChildOf), (With<Selected>, Without<SelectionRing>)>>,
+    ring: Single<(Entity, &mut Transform, &mut Visibility, &ChildOf), With<SelectionRing>>,
 ) {
-    let (puck_transform, puck_parent) = *puck;
-    let (entity, mut transform, ring_parent) = ring.into_inner();
-    if ring_parent.parent() != puck_parent.parent() {
+    let (entity, mut transform, mut visibility, ring_parent) = ring.into_inner();
+    let Some(selected) = selected else {
+        if *visibility != Visibility::Hidden {
+            *visibility = Visibility::Hidden;
+        }
+        return;
+    };
+    if *visibility != Visibility::Inherited {
+        *visibility = Visibility::Inherited;
+    }
+    let (hero_transform, hero_parent) = *selected;
+    if ring_parent.parent() != hero_parent.parent() {
         commands
             .entity(entity)
-            .insert(ChildOf(puck_parent.parent()));
+            .insert(ChildOf(hero_parent.parent()));
     }
     // Write-if-changed: an unconditional write would re-dirty the ring's
-    // Transform (and its propagation) every frame the puck stands still.
-    let target = puck_transform.translation.truncate();
+    // Transform (and its propagation) every frame the hero stands still.
+    let target = hero_transform.translation.truncate();
     if transform.translation.truncate() != target {
         transform.translation.x = target.x;
         transform.translation.y = target.y;

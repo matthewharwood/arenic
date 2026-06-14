@@ -41,6 +41,13 @@ pub(crate) enum RecordingState {
     Recording,
 }
 
+/// Set for one frame by the hotbar's record button (`hotbar::record_clicked`)
+/// so a CLICK drives the exact same [`handle_r_key`] flow as the `R` key —
+/// countdown, the commit modal, everything. Drained every frame by
+/// [`clear_record_clicked`].
+#[derive(Resource, Default)]
+pub(crate) struct RecordClicked(pub(crate) bool);
+
 /// The draft staff being captured — empty unless a recording is in flight.
 #[derive(Resource, Default)]
 pub(crate) struct DraftTimeline {
@@ -110,6 +117,21 @@ pub(crate) fn no_pending_walk(pending: Option<Res<PendingWalk>>) -> bool {
 
 fn counting_down(state: Res<RecordingState>) -> bool {
     matches!(*state, RecordingState::Countdown { .. })
+}
+
+/// `true` the frame the hotbar's record button was clicked (the click path's
+/// `R`-key equivalent).
+fn record_clicked(clicked: Res<RecordClicked>) -> bool {
+    clicked.0
+}
+
+/// Drains [`RecordClicked`] every frame — ordered after [`handle_r_key`], so a
+/// click is consumed whether or not it actually fired (e.g. it's discarded if a
+/// modal or the tile editor was up, exactly like a stray `R`).
+fn clear_record_clicked(mut clicked: ResMut<RecordClicked>) {
+    if clicked.0 {
+        clicked.0 = false;
+    }
 }
 
 /// `m:ss` of a cycle tick — the clock format every HUD strip shares.
@@ -678,6 +700,7 @@ impl Plugin for RecordingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RecordingState>()
             .init_resource::<DraftTimeline>()
+            .init_resource::<RecordClicked>()
             .add_message::<RecordingCommitted>()
             .add_observer(ghost_ring_add)
             .add_observer(ghost_ring_remove)
@@ -688,10 +711,13 @@ impl Plugin for RecordingPlugin {
                 (
                     handle_r_key.run_if(
                         input_just_pressed(KeyCode::KeyR)
+                            .or(record_clicked)
                             .and(no_modal)
                             .and(no_pending_walk)
                             .and(not_tile_editing),
                     ),
+                    // Always drains the click latch, after `handle_r_key` read it.
+                    clear_record_clicked.after(handle_r_key),
                     capture_intent.run_if(is_recording.and(no_modal)),
                     // Gated on a pending message: the heavy ParamSet (and its
                     // mutable access) is skipped entirely on choice-less frames.

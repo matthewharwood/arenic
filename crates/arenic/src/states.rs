@@ -5,9 +5,12 @@ use bevy::prelude::*;
 /// transition. Navigation is just `NextState::set(..)`.
 #[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum AppState {
-    /// Landing screen: the "Arenic" title plus the Start button.
+    /// Landing screen: the "Arenic" title plus the Start + Settings buttons.
     #[default]
     Title,
+    /// The settings screen (reached from Title): pick the display resolution
+    /// mode (720 / 1080). Owns its own camera, like every other top screen.
+    Settings,
     /// Placeholder for the game's intro (entered via "Start").
     Intro,
 }
@@ -30,3 +33,9 @@ pub(crate) fn not_tile_editing(mode: Option<Res<TileEditMode>>) -> bool {
 /// touching its registration. Author-only, like [`TileEditMode`].
 #[derive(Resource)]
 pub(crate) struct BrowserFocus;
+
+/// Present while the author dope sheet's layer RENAME field owns the keyboard
+/// (typing a label must not trip the edit/world hotkeys). Folded into
+/// [`crate::modal::no_modal`] exactly like [`BrowserFocus`]. Author-only.
+#[derive(Resource)]
+pub(crate) struct RenameFocus;

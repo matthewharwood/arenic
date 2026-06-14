@@ -14,7 +14,11 @@
 //! - **Music**: one [`DesiredMusic`] resource names what should be playing
 //!   ([`MusicTarget`]); the engine crossfades looping sinks toward it
 //!   (~1.2 s exponential approach) and despawns what faded out. The overworld
-//!   target is the procedural [`DroneSource`] — oscillators, no asset.
+//!   target is the procedural [`DroneSource`] — oscillators, no asset. An arena
+//!   [`MusicTarget::Track`] is LOCKED to that arena's 2-minute [`ArenaClock`]
+//!   ([`sync_tracks`]): it drops in at the clock's position, fades out/in across
+//!   the cycle boundary, and re-seeks on a wrap / `F5` restart / dope-sheet seek
+//!   (paused while the clock is, so authoring scrubs don't drift).
 //! - **Mix**: [`AudioMix`] is a tiny SFX bus — the overworld ducks it to
 //!   [`OVERWORLD_SFX`] so the drone "smooths" the distant activity (bevy_audio
 //!   has no filters; duck + mask is the honest substitute until Firewheel).
@@ -28,6 +32,8 @@ mod drone;
 
 pub use drone::DroneSource;
 
+use std::time::Duration;
+
 use bevy::audio::{
     AddAudioSource, AudioPlayer, AudioSink, AudioSinkPlayback, AudioSource, DefaultSpatialScale,
     GlobalVolume, PlaybackSettings, SpatialScale, Volume,
@@ -36,6 +42,7 @@ use bevy::prelude::*;
 
 use crate::arena::Arena;
 use crate::grid::ARENAS;
+use crate::timeline::{ArenaClock, CYCLE_TICKS, TICKS_PER_SECOND};
 
 /// Ear gap of the camera-microphone, world units ([`bevy::audio::SpatialListener::new`]).
 /// Pan strength for distant sources is gap-invariant; this mostly shapes how
@@ -50,6 +57,16 @@ const MUSIC_FADE_TAU: f32 = 0.4;
 const MIX_TAU: f32 = 0.17;
 /// A music sink below this is silent enough to despawn.
 const SILENCE_FLOOR: f32 = 0.005;
+/// Ticks of fade at each end of the 2-minute arena cue: the track fades OUT
+/// over the last `CYCLE_FADE_TICKS` and back IN over the first, so the loop seam
+/// at the cycle boundary is a soft envelope, not a hard cut (and it masks the
+/// resync seek to tick 0). 90 ticks = 1.5 s.
+const CYCLE_FADE_TICKS: u32 = 90;
+/// A forward clock jump beyond this many ticks in one frame is a SEEK, not the
+/// natural ~1-tick advance — so the music re-seeks to it. 30 ticks = 0.5 s,
+/// comfortably above any frame-hitch catch-up yet far below a `,`/`.` scrub
+/// (≥1 s) or a ruler drag.
+const RESYNC_FORWARD: u32 = 30;
 
 /// The title screen's theme.
 const THEME_PATH: &str = "music/arenic_theme.mp3";
@@ -59,6 +76,7 @@ const THEME_PATH: &str = "music/arenic_theme.mp3";
 /// plays no music: the spatial SFX carry the scene.
 fn arena_track(arena: Arena) -> Option<&'static str> {
     match arena {
+        Arena::Guildmaster => Some("music/guildmaster_guildhouse.mp3"),
         Arena::Warrior => Some("music/warrior_bastion.mp3"),
         Arena::Merchant => Some("music/merchant_casino.mp3"),
         _ => None,
@@ -164,6 +182,34 @@ struct MusicAssets {
 #[component(immutable)]
 struct MusicChannel(MusicTarget);
 
+/// Clock-sync state on an arena [`MusicChannel`] (only `Track` channels carry
+/// it): the tick it last observed — so [`sync_tracks`] can spot a
+/// wrap/restart/seek discontinuity — and the cycle-end volume envelope that
+/// [`tend_music`] folds in.
+#[derive(Component)]
+struct TrackSync {
+    prev_tick: u32,
+    envelope: f32,
+}
+
+/// The cycle-end volume envelope from an arena tick: fades in over the first
+/// [`CYCLE_FADE_TICKS`], full through the middle, fades out over the last —
+/// deterministic, so the boundary fade can never drift from the clock.
+fn cycle_envelope(tick: u32) -> f32 {
+    if tick < CYCLE_FADE_TICKS {
+        tick as f32 / CYCLE_FADE_TICKS as f32
+    } else if tick >= CYCLE_TICKS.saturating_sub(CYCLE_FADE_TICKS) {
+        CYCLE_TICKS.saturating_sub(tick) as f32 / CYCLE_FADE_TICKS as f32
+    } else {
+        1.0
+    }
+}
+
+/// The arena playback position (seconds) for a clock tick.
+fn tick_seconds(tick: u32) -> Duration {
+    Duration::from_secs_f32(tick as f32 / TICKS_PER_SECOND as f32)
+}
+
 /// A music sink's full-on level, per target — the drone sits a little lower
 /// so the spatial wash stays legible through it.
 fn target_level(target: MusicTarget) -> f32 {
@@ -199,6 +245,7 @@ fn apply_music(
     desired: Res<DesiredMusic>,
     assets: Res<MusicAssets>,
     channels: Query<&MusicChannel>,
+    clocks: Query<(&Arena, &ArenaClock)>,
 ) {
     let target = desired.0;
     if channels.iter().any(|channel| channel.0 == target) {
@@ -217,10 +264,20 @@ fn apply_music(
         MusicTarget::Track(arena) => {
             // No file yet -> nothing spawns; the outgoing track fades to silence.
             if let Some(track) = &assets.tracks[arena.index()] {
+                // Drop in at the arena clock's position, so entering mid-cycle
+                // begins the cue at the matching timestamp (tick 0 -> the start).
+                let tick = clocks
+                    .iter()
+                    .find(|(candidate, _)| **candidate == arena)
+                    .map_or(0, |(_, clock)| clock.tick);
                 commands.spawn((
                     AudioPlayer::new(track.clone()),
-                    settings,
+                    settings.with_start_position(tick_seconds(tick)),
                     MusicChannel(target),
+                    TrackSync {
+                        prev_tick: tick,
+                        envelope: cycle_envelope(tick),
+                    },
                 ));
             }
         }
@@ -237,6 +294,46 @@ fn apply_music(
     }
 }
 
+/// Locks the focused arena's track to its [`ArenaClock`]: pauses the sink while
+/// the clock is paused (scrubbing/editing), re-seeks it on any non-natural tick
+/// jump — a wrap, an `F5` restart, a dope-sheet/ruler seek — and refreshes the
+/// cycle-end envelope. Those seeks land inaudibly: at a boundary the envelope
+/// has already faded the track near-silent, and while scrubbing the clock (hence
+/// the sink) is paused. Only the desired channel is synced; an outgoing track
+/// just fades out free-running. Steady play needs no seeks — sink and clock both
+/// advance at real time, so they stay in step from the `start_position` on.
+fn sync_tracks(
+    desired: Res<DesiredMusic>,
+    clocks: Query<(&Arena, &ArenaClock)>,
+    mut channels: Query<(&MusicChannel, &AudioSink, &mut TrackSync)>,
+) {
+    let MusicTarget::Track(arena) = desired.0 else {
+        return;
+    };
+    let Some((_, clock)) = clocks.iter().find(|(candidate, _)| **candidate == arena) else {
+        return;
+    };
+    let tick = clock.tick;
+    for (channel, sink, mut sync) in &mut channels {
+        if channel.0 != desired.0 {
+            continue; // an outgoing track fades out free-running
+        }
+        if clock.paused {
+            if !sink.is_paused() {
+                sink.pause();
+            }
+        } else if sink.is_paused() {
+            sink.play();
+        }
+        let jumped = tick < sync.prev_tick || tick > sync.prev_tick.saturating_add(RESYNC_FORWARD);
+        if jumped {
+            let _ = sink.try_seek(tick_seconds(tick));
+        }
+        sync.envelope = cycle_envelope(tick);
+        sync.prev_tick = tick;
+    }
+}
+
 /// Eases every music sink toward its place in the crossfade — full level for
 /// the desired target, silence for the rest — and despawns what finished
 /// fading out. Exponential approach: smooth, stateless, web-step tolerant.
@@ -248,12 +345,19 @@ fn tend_music(
     time: Res<Time>,
     desired: Res<DesiredMusic>,
     global: Res<GlobalVolume>,
-    mut channels: Query<(Entity, &MusicChannel, &mut AudioSink)>,
+    mut channels: Query<(Entity, &MusicChannel, &mut AudioSink, Option<&TrackSync>)>,
 ) {
     let factor = (time.delta_secs() / MUSIC_FADE_TAU).min(1.0);
-    for (entity, channel, mut sink) in &mut channels {
+    for (entity, channel, mut sink, sync) in &mut channels {
         let wanted = channel.0 == desired.0;
-        let level = if wanted { target_level(channel.0) } else { 0.0 };
+        // A Track channel's cycle-end envelope folds into the crossfade goal, so
+        // the boundary fade and the arena-switch crossfade share one volume.
+        let envelope = sync.map_or(1.0, |sync| sync.envelope);
+        let level = if wanted {
+            target_level(channel.0) * envelope
+        } else {
+            0.0
+        };
         let goal = Volume::Linear(level) * global.volume;
         let next = sink.volume().fade_towards(goal, factor);
         sink.set_volume(next);
@@ -298,6 +402,8 @@ impl Plugin for GameAudioPlugin {
                 Update,
                 (
                     apply_music.run_if(resource_exists::<MusicAssets>),
+                    // Lock the focused arena's track to its clock, then fade.
+                    sync_tracks,
                     tend_music,
                     tend_mix,
                 )
